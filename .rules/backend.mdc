@@ -143,7 +143,7 @@ CREATE TABLE prompt_templates (
 CREATE TABLE prompt_versions (
   id          VARCHAR(64)   PRIMARY KEY COMMENT '版本唯一 ID',
   prompt_id   VARCHAR(64)   NOT NULL COMMENT '关联的模板 ID',
-  version     VARCHAR(20)   NOT NULL COMMENT '版本号，如 v1.0.0',
+  version     VARCHAR(20)   NOT NULL COMMENT '版本号，如 V1、V2、V3',
   content     JSON          NOT NULL COMMENT 'PromptTemplate 完整快照',
   created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uk_prompt_version (prompt_id, version),

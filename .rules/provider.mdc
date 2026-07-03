@@ -124,7 +124,8 @@ interface ImageProvider {
 2. **通过 `registerProvider()` 注册** — 不直接修改 Workflow
 3. **Provider 不含业务逻辑** — 只负责调用 AI，不解析/校验/存储
 4. **错误统一封装为 `WorkflowError`** — code 使用 `PROVIDER_ERROR`
-5. **支持超时控制** — 默认 30s 超时，可配置
+5. **支持超时控制** — 文字模型默认 30s，图片模型默认 15s。超时可配置。
+6. **图片超时处理** — 超时后 UI 显示「重试」按钮，用户手动点击重试（仅 1 次）。不自动重试。
 
 ### 4.3 禁止事项
 
