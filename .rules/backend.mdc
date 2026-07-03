@@ -1,0 +1,239 @@
+---
+description: ContentFlow Lite 后端架构规范（Hono + TiDB）
+alwaysApply: true
+---
+
+# Backend Rules — 后端架构与数据库规范
+
+## 一、技术选型
+
+| 层 | 技术 | 说明 |
+|---|---|---|
+| API 框架 | **Hono** | 轻量、TypeScript 原生、边缘部署 |
+| 数据库 | **TiDB**（MySQL 兼容） | 用户已有 TiDB 账户 |
+| 数据库驱动 | **mysql2** | Node.js MySQL 客户端 |
+| 部署 | Node.js 服务 | 与前端分离部署 |
+
+### 选型理由
+
+- ❌ Next.js — 前端已是 Vue，用 Next.js 做纯 API 不合适
+- ❌ NestJS — 项目规模不大时过度工程
+- ✅ Hono — 代码量少、性能好、TS 原生、与 Vue 前端配合简洁
+
+---
+
+## 二、项目结构
+
+```
+ContentFlow Lite
+├── src/                    # Vue 3 前端（已有）
+│   ├── pages/
+│   ├── stores/
+│   ├── workflow/
+│   └── ...
+│
+├── server/                 # Hono 后端（新增）
+│   ├── index.ts            # 入口：创建 Hono app，注册路由
+│   ├── routes/
+│   │   ├── content.ts      # /api/content/*
+│   │   ├── prompt.ts       # /api/prompt/*
+│   │   └── generate.ts     # /api/generate（AI 生成）
+│   ├── db/
+│   │   ├── client.ts       # TiDB 连接池（mysql2）
+│   │   ├── schema.ts       # 建表 SQL
+│   │   └── repositories/
+│   │       ├── content-repo.ts
+│   │       ├── prompt-repo.ts
+│   │       └── generation-repo.ts
+│   └── middleware/
+│       ├── cors.ts
+│       └── logger.ts
+│
+├── .env                    # 数据库 + API Key 配置
+└── package.json            # monorepo scripts
+```
+
+---
+
+## 三、数据库表设计（TiDB / MySQL 兼容）
+
+### 3.1 contents — 内容表
+
+```sql
+CREATE TABLE contents (
+  id          VARCHAR(64)   PRIMARY KEY COMMENT 'Content DTO 的 id',
+  topic       VARCHAR(500)  NOT NULL COMMENT '生成主题',
+  platform    VARCHAR(50)   NOT NULL COMMENT '平台：xiaohongshu/douyin',
+  titles      JSON          NOT NULL COMMENT 'Title[] 数组',
+  cover       JSON          NOT NULL COMMENT 'Cover {title, subtitle}',
+  pages       JSON          NOT NULL COMMENT 'Page[] 数组',
+  tags        JSON          NOT NULL COMMENT 'string[] 标签',
+  summary     TEXT          COMMENT '内容摘要',
+  metadata    JSON          NOT NULL COMMENT 'Metadata {promptId, version, model...}',
+  created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_platform (platform),
+  INDEX idx_created_at (created_at)
+) COMMENT='内容表 — 存储 Content DTO';
+```
+
+### 3.2 prompt_templates — Prompt 模板表
+
+```sql
+CREATE TABLE prompt_templates (
+  id            VARCHAR(64)   PRIMARY KEY COMMENT '模板唯一 ID',
+  name          VARCHAR(200)  NOT NULL COMMENT '模板名称',
+  platform      VARCHAR(50)   NOT NULL COMMENT '目标平台',
+  system_prompt TEXT          NOT NULL COMMENT 'System Prompt 内容',
+  user_prompt   TEXT          NOT NULL COMMENT 'User Prompt 模板（含 {{变量}}）',
+  created_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_platform (platform)
+) COMMENT='Prompt 模板表';
+```
+
+### 3.3 prompt_versions — Prompt 版本表
+
+```sql
+CREATE TABLE prompt_versions (
+  id          VARCHAR(64)   PRIMARY KEY COMMENT '版本唯一 ID',
+  prompt_id   VARCHAR(64)   NOT NULL COMMENT '关联的模板 ID',
+  version     VARCHAR(20)   NOT NULL COMMENT '版本号，如 v1.0.0',
+  content     JSON          NOT NULL COMMENT 'PromptTemplate 完整快照',
+  created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_prompt_version (prompt_id, version),
+  INDEX idx_prompt_id (prompt_id)
+) COMMENT='Prompt 版本表 — 不可覆盖，只增不改';
+```
+
+### 3.4 generation_records — 生成记录表
+
+```sql
+CREATE TABLE generation_records (
+  id              VARCHAR(64)   PRIMARY KEY COMMENT '记录唯一 ID',
+  content_id      VARCHAR(64)   NOT NULL COMMENT '关联的 Content ID',
+  topic           VARCHAR(500)  NOT NULL COMMENT '生成主题（冗余，便于列表查询）',
+  platform        VARCHAR(50)   NOT NULL COMMENT '平台（冗余）',
+  prompt_id       VARCHAR(64)   NOT NULL COMMENT '使用的 Prompt ID',
+  prompt_version  VARCHAR(20)   NOT NULL COMMENT '使用的 Prompt 版本',
+  model           VARCHAR(100)  NOT NULL COMMENT 'AI 模型名称',
+  created_at      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_content_id (content_id),
+  INDEX idx_prompt_id (prompt_id),
+  INDEX idx_created_at (created_at)
+) COMMENT='生成记录表 — 追踪每次 AI 生成';
+```
+
+---
+
+## 四、表设计原则
+
+| 原则 | 说明 |
+|------|------|
+| **JSON 字段存储复杂结构** | titles / pages / tags / metadata 等嵌套结构用 JSON，TiDB 完整支持，避免建大量关联表 |
+| **UNIQUE KEY 防覆盖** | `prompt_versions(prompt_id, version)` 唯一约束，强制版本只增不改 |
+| **生成记录冗余** | `generation_records` 冗余 topic/platform，列表查询无需 JOIN |
+| **不用外键约束** | Content DTO 自包含，应用层保证一致性 |
+| **VARCHAR(64) 主键** | 使用生成 ID（如 `content_xxx`），比自增 ID 更适合分布式 |
+
+---
+
+## 五、后端开发规范
+
+### 5.1 路由设计（RESTful）
+
+```
+GET    /api/content          # 内容列表
+GET    /api/content/:id      # 内容详情
+POST   /api/content          # 保存内容
+PUT    /api/content/:id      # 更新内容
+DELETE /api/content/:id      # 删除内容
+
+GET    /api/prompt/templates        # 模板列表
+POST   /api/prompt/templates        # 创建模板
+PUT    /api/prompt/templates/:id    # 更新模板（自动生成新版本）
+DELETE /api/prompt/templates/:id    # 删除模板
+
+GET    /api/prompt/versions/:promptId   # 某模板的所有版本
+
+POST   /api/generate          # 触发 AI 生成
+```
+
+### 5.2 分层约束
+
+```
+routes/ → 只做参数校验 + 调用 db/repositories/
+db/repositories/ → 只做 CRUD，不包含业务逻辑
+```
+
+路由层不得直接写 SQL，必须通过 repository。
+
+### 5.3 错误处理
+
+```ts
+interface APIError {
+  error: {
+    code: string;       // 与前端 WorkflowError.code 对齐
+    message: string;
+    detail?: unknown;
+  };
+}
+```
+
+所有 API 响应统一格式：
+```json
+// 成功
+{ "data": {...} }
+
+// 失败
+{ "error": { "code": "CONTENT_NOT_FOUND", "message": "内容不存在" } }
+```
+
+### 5.4 环境变量
+
+```
+TIDB_HOST=        # TiDB 主机地址
+TIDB_PORT=4000    # TiDB 端口
+TIDB_USER=        # 数据库用户名
+TIDB_PASSWORD=    # 数据库密码
+TIDB_DATABASE=    # 数据库名
+```
+
+---
+
+## 六、前端适配
+
+前端现有 `LocalStorageRepository` 保留作为离线缓存。
+
+调用链路改为：
+```
+Page → Store → Workflow → 前端 Provider
+                              ↓
+                         fetch() → Hono API → TiDB
+                              ↓
+                         返回 Content DTO
+```
+
+`src/repositories/` 新增 `HttpRepository<T>` 实现，走 HTTP 调用后端 API。
+
+```ts
+class HttpRepository<T extends { id: string }> implements Repository<T> {
+  constructor(private basePath: string) {}
+  async save(item: T): Promise<void> { /* POST /api/content */ }
+  async get(id: string): Promise<T | null> { /* GET /api/content/:id */ }
+  async list(): Promise<T[]> { /* GET /api/content */ }
+  async delete(id: string): Promise<void> { /* DELETE /api/content/:id */ }
+}
+```
+
+---
+
+## 七、决策记录
+
+| 日期 | 决策 | 原因 |
+|------|------|------|
+| 2026-07-03 | 后端框架 = Hono | 轻量、TS 原生、与 Vue 搭配简洁 |
+| 2026-07-03 | 数据库 = TiDB（MySQL 兼容） | 用户已有账户，成熟稳定 |
+| 2026-07-03 | 复杂结构用 JSON 字段 | TiDB 支持 MySQL JSON，减少关联表 |
+| 2026-07-03 | 不选 Next.js | 前端已是 Vue，Next.js 做纯 API 不合适 |
+| 2026-07-03 | 不选 NestJS | 项目规模不大时过度工程 |

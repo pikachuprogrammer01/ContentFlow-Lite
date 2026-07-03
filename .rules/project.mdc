@@ -26,7 +26,22 @@ AI 模型决策受 `.rules/provider.mdc` 约束，这里列出简洁摘要：
 
 ---
 
-## 三、技术选型
+## 三、后端与数据持久化
+
+后端架构受 `.rules/backend.mdc` 约束，摘要：
+
+| 层 | 技术 |
+|---|---|
+| API 框架 | Hono |
+| 数据库 | TiDB（MySQL 兼容） |
+| 驱动 | mysql2 |
+
+- 四张核心表：`contents` / `prompt_templates` / `prompt_versions` / `generation_records`
+- 前端 `LocalStorageRepository` 保留作为离线缓存，新增 `HttpRepository` 走后端 API
+
+---
+
+## 四、前端技术选型
 
 | 层 | 技术 | 版本约束 |
 |---|---|---|
@@ -39,7 +54,7 @@ AI 模型决策受 `.rules/provider.mdc` 约束，这里列出简洁摘要：
 
 ---
 
-## 四、包管理
+## 五、包管理
 
 - 必须使用 pnpm
 - `pnpm-lock.yaml` 必须提交
@@ -47,7 +62,7 @@ AI 模型决策受 `.rules/provider.mdc` 约束，这里列出简洁摘要：
 
 ---
 
-## 五、外部依赖原则
+## 六、外部依赖原则
 
 - 优先使用项目已有模块
 - 新增 npm 包需评估必要性

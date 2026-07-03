@@ -114,7 +114,24 @@ rules/provider.mdc
 - 扩展现有 Provider 的规则
 
 文本生成默认使用 Gemini 2.0 Flash（主）→ DeepSeek V4 Flash（兜底）。
-图片生成默认使用 FLUX.1 [schnell] via Together AI。
+图片生成默认使用硅基流动 FLUX.1 schnell（主）→ 阿里云通义万相（兜底）。
+
+---
+
+## 7. 后端 / 数据库类任务
+
+读取：
+
+rules/backend.mdc
+
+关注内容：
+
+- Hono 后端架构与分层约束
+- TiDB 数据库连接方式（mysql2）
+- 四张核心表结构（contents / prompt_templates / prompt_versions / generation_records）
+- RESTful API 路由设计
+- HttpRepository 前端适配
+- 后端禁止含业务逻辑（路由只做校验 → repository 只做 CRUD）
 
 ---
 
@@ -133,7 +150,7 @@ Parser
  ↓
 Content DTO
  ↓
-Export / Storage
+Export / Storage（前端 localStorage + 后端 TiDB）
 ```
 
 ---
