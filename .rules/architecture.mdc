@@ -1,0 +1,372 @@
+---
+description: ContentFlow Lite 项目架构规范
+alwaysApply: true
+---
+
+# Architecture Rules
+
+## 一、核心原则
+
+ContentFlow Lite 采用统一的数据模型和工作流架构。
+
+所有开发必须遵循以下三个核心原则：
+
+### 1. Workflow First
+
+Workflow Engine 是整个系统唯一业务入口。
+
+任何业务流程都必须经过 Workflow 调度。
+
+禁止页面直接调用：
+
+- AI Provider
+- Parser
+- Storage
+- Exporter
+
+新增功能时，应优先扩展 Workflow，而不是修改页面逻辑。
+
+---
+
+### 2. Content DTO First
+
+整个系统只允许维护一套 Content DTO。
+
+任何模块都不得重新定义自己的内容结构。
+
+所有业务数据必须围绕 Content DTO 展开。
+
+禁止：
+
+- 保存 Raw Response
+- 页面维护独立 Content 对象
+- Exporter 自行拼接数据
+- Storage 保存非 DTO 数据
+
+---
+
+### 3. Prompt Version First
+
+每一次内容生成都必须记录：
+
+- Prompt ID
+- Prompt Version
+- AI Model
+- Platform
+- Timestamp
+
+Prompt Version 创建后不可修改。
+
+任何 Prompt 更新都必须生成新的 Version。
+
+禁止覆盖历史 Prompt。
+
+---
+
+# 二、架构约束
+
+项目采用分层架构。
+
+```text
+Presentation
+      │
+      ▼
+Workflow
+      │
+      ▼
+Services
+      │
+      ▼
+Domain
+      │
+      ▼
+Infrastructure
+```
+
+依赖关系必须保持单向。
+
+禁止：
+
+- 循环依赖
+- 跨层调用
+- 页面调用基础设施层
+
+---
+
+# 三、模块职责
+
+## Presentation
+
+负责：
+
+- 页面展示
+- 用户输入
+- 用户交互
+
+禁止：
+
+- AI 调用
+- Prompt 拼接
+- JSON 解析
+- LocalStorage 操作
+
+---
+
+## Workflow
+
+负责：
+
+- 参数校验
+- Prompt 构建
+- 调用 AI
+- 调用 Parser
+- 返回 DTO
+- 统一异常处理
+
+禁止：
+
+- 保存数据
+- 导出数据
+- 修改 DTO
+- 页面状态管理
+
+---
+
+## Prompt Builder
+
+负责：
+
+- 构建 Prompt
+- 替换变量
+- 注入 Metadata
+- 记录 Prompt Version
+
+禁止：
+
+- 调用 AI
+- 保存数据
+- 更新页面
+
+---
+
+## AI Provider
+
+负责：
+
+- 调用 AI 模型
+- 返回原始响应
+
+禁止：
+
+- 解析数据
+- 保存数据
+- 修改 DTO
+
+Provider 必须通过统一接口暴露能力。
+
+---
+
+## Parser
+
+负责：
+
+- JSON 校验
+- 字段校验
+- 数据标准化
+- DTO 构建
+
+禁止：
+
+- AI 调用
+- Prompt 修改
+- Storage 操作
+- 页面更新
+
+Parser 是唯一允许生成 Content DTO 的模块。
+
+---
+
+## Storage
+
+负责：
+
+- 数据保存
+- 数据读取
+- 数据删除
+
+禁止：
+
+- JSON 解析
+- DTO 修改
+- Prompt 构建
+
+Storage 必须通过 Repository Interface 对外提供能力。
+
+业务层不得直接操作 LocalStorage。
+
+---
+
+## Exporter
+
+负责：
+
+- Markdown 导出
+- JSON 导出
+- HTML 导出（未来）
+- PDF 导出（未来）
+
+Exporter 只能读取 Content DTO。
+
+不得修改 DTO。
+
+不得依赖页面。
+
+---
+
+# 四、Content DTO 规范
+
+整个项目统一使用 Content DTO。
+
+标准结构：
+
+```text
+Content
+├── id
+├── topic
+├── platform
+├── titles[]
+├── cover
+├── pages[]
+├── tags[]
+├── summary
+└── metadata
+```
+
+metadata 至少包含：
+
+- promptId
+- promptVersion
+- model
+- platform
+- createdAt
+
+任何模块不得删除 Metadata。
+
+---
+
+# 五、Workflow 规范
+
+Workflow 生命周期固定如下：
+
+```text
+Input
+
+↓
+
+Prompt Builder
+
+↓
+
+AI Provider
+
+↓
+
+Parser
+
+↓
+
+Content DTO
+
+↓
+
+Editor / Exporter
+```
+
+不得跳过任何阶段。
+
+任何模块不得绕过 Workflow。
+
+---
+
+# 六、Repository 规范
+
+所有持久化必须经过 Repository。
+
+允许：
+
+- save()
+- get()
+- list()
+- delete()
+
+禁止：
+
+- 页面直接保存数据
+- Workflow 操作 LocalStorage
+- Parser 操作 Repository
+
+Storage 实现可以替换，但 Repository Interface 必须保持稳定。
+
+---
+
+# 七、扩展规范
+
+新增 AI 模型：
+
+仅新增 Provider。
+
+不得修改 Workflow。
+
+新增平台：
+
+仅新增 Prompt Template。
+
+不得修改 Parser。
+
+新增导出格式：
+
+仅新增 Exporter。
+
+不得修改 Workflow。
+
+新增图片生成：
+
+读取 Cover 与 Pages。
+
+不得重新解析内容。
+
+---
+
+# 八、开发约束
+
+开发过程中必须遵循以下规则：
+
+1. 每个模块只承担一种职责。
+2. 所有模块通过 Interface 通信。
+3. 所有业务入口统一经过 Workflow。
+4. 所有业务数据统一使用 Content DTO。
+5. 所有 Prompt 必须记录 Version。
+6. 所有导出均基于 DTO。
+7. 所有持久化均通过 Repository。
+8. 所有异常统一由 Workflow 处理。
+
+---
+
+# 九、禁止事项
+
+禁止出现以下情况：
+
+- 页面直接调用 AI。
+- 页面拼接 Prompt。
+- Parser 保存数据。
+- Exporter 修改 DTO。
+- Storage 保存 Raw Response。
+- 多套 Content 数据结构并存。
+- Prompt Version 被覆盖。
+- 模块循环依赖。
+- 跨层调用业务逻辑。
+- 将业务逻辑写入 Vue 页面。
+
+以上规则属于项目最高优先级约束。
+
+任何新增功能或代码修改，都必须优先满足本文件中的架构规范，再考虑具体业务实现。

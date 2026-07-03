@@ -1,0 +1,319 @@
+---
+description: ContentFlow Lite 前端 UI 与交互规范
+alwaysApply: true
+---
+
+# UI Rules
+
+## 一、核心目标
+
+UI 层的唯一职责是：
+
+> 将 Content DTO 转换为可视化界面，并处理用户交互。
+
+UI 层不允许参与任何业务逻辑。
+
+---
+
+## 二、UI 职责边界
+
+### UI 允许做：
+
+- 渲染 Content DTO
+- 处理用户输入
+- 调用 Workflow
+- 控制页面状态（loading / error / success）
+
+---
+
+### UI 禁止做：
+
+- 调用 AI Provider
+- 调用 Parser
+- 拼接 Prompt
+- 直接操作 Storage
+- 修改 Content DTO 结构
+- 处理业务逻辑
+
+---
+
+## 三、页面结构规范
+
+所有页面必须遵循统一结构：
+
+```text
+Page
+ ├── Header（展示信息）
+ ├── Content View（DTO 渲染）
+ ├── Actions（操作区）
+ └── State Layer（loading / error / empty）
+```
+
+---
+
+## 四、组件拆分规范
+
+### 1. 页面组件（Page）
+
+- 只负责布局
+- 不写业务逻辑
+- 不处理数据转换
+
+---
+
+### 2. 通用组件（Components）
+
+- 可复用 UI
+- 不依赖业务逻辑
+- 输入输出必须纯净
+
+---
+
+### 3. 业务组件（Business Components）
+
+- 只允许接收 DTO
+- 不允许自行请求数据
+- 不允许调用 Workflow
+
+---
+
+## 五、Content DTO 渲染规范
+
+所有 UI 必须直接基于 Content DTO：
+
+```text
+Content
+ ├── titles → TitleListView
+ ├── cover → CoverView
+ ├── pages → PageListView
+ ├── tags → TagView
+```
+
+---
+
+### 禁止：
+
+- UI 自行构造内容结构
+- 使用临时 JSON 渲染页面
+- 修改 DTO 用于 UI 适配
+
+---
+
+## 六、状态管理规范（UI层）
+
+UI 只允许管理三类状态：
+
+### 1. Loading
+
+```text
+生成中 / 请求中 / 导出中
+```
+
+---
+
+### 2. Error
+
+```text
+Workflow Error
+Network Error
+Validation Error
+```
+
+---
+
+### 3. Empty
+
+```text
+无数据状态
+初始化状态
+```
+
+---
+
+## 七、Workflow 调用规范
+
+UI 只能通过 Workflow 发起业务请求：
+
+### 正确：
+
+```ts
+workflow.generateContent(params)
+```
+
+---
+
+### 错误：
+
+```ts
+ai.generate()
+parser.parse()
+storage.save()
+```
+
+---
+
+## 八、交互规范
+
+### 1. 用户输入
+
+必须通过 Form 统一收集：
+
+- topic
+- platform
+- extra params
+
+---
+
+### 2. 用户操作
+
+必须触发 Workflow：
+
+- 生成内容
+- 更新内容
+- 导出内容
+
+---
+
+### 3. 禁止行为
+
+- UI 内拼接 Prompt
+- UI 内解析 AI Response
+- UI 内操作 DTO 结构
+
+---
+
+## 九、Loading 规范
+
+所有异步流程必须有 Loading 状态：
+
+### 标准流程：
+
+```text
+点击 → loading → Workflow → DTO → render
+```
+
+---
+
+### 禁止：
+
+- 无 loading 状态
+- loading 卡死 UI
+- loading 与业务混合
+
+---
+
+## 十、错误展示规范
+
+所有错误必须由 Workflow 返回：
+
+UI 仅负责展示：
+
+- message
+- code
+- retry action
+
+---
+
+## 十一、Empty 状态规范
+
+必须处理：
+
+- 首次进入页面
+- 无数据状态
+- 查询为空
+
+---
+
+UI 必须提供明确提示：
+
+- “暂无内容”
+- “请先生成内容”
+
+---
+
+## 十二、Store 使用规范
+
+Pinia Store 仅用于：
+
+- UI 状态
+- 当前页面状态
+- Workflow 输入缓存
+
+---
+
+禁止：
+
+- Store 中写业务逻辑
+- Store 中调用 AI
+- Store 中解析 DTO
+
+---
+
+## 十三、页面通信规范
+
+页面之间不得直接通信。
+
+必须通过：
+
+- Workflow
+- Store
+
+---
+
+## 十四、动画与体验规范
+
+UI 动画必须满足：
+
+- 不影响 Workflow 执行
+- 不阻塞渲染
+- 不影响 DTO 更新
+
+---
+
+## 十五、响应式规范
+
+所有 DTO 数据必须响应式绑定：
+
+- 不允许深拷贝破坏响应性
+- 不允许局部结构重建 DTO
+- 不允许手动同步状态
+
+---
+
+## 十六、UI 扩展规则
+
+允许新增：
+
+- 页面
+- 组件
+- 动效
+- 主题
+
+禁止：
+
+- 修改 DTO 结构适配 UI
+- 修改 Workflow 适配 UI
+- UI 直接依赖 AI 输出结构
+
+---
+
+## 十七、安全规范
+
+UI 层禁止：
+
+- 暴露 Prompt 内容
+- 暴露 API Key
+- 输出 Raw Response
+- 输出未解析 JSON
+
+---
+
+## 十八、总结
+
+UI 层的核心原则：
+
+> UI = DTO Renderer + Interaction Layer
+
+所有复杂逻辑必须上移到 Workflow 或 Parser。
+
+UI 永远不能成为业务系统的一部分，只能是展示层。

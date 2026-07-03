@@ -1,0 +1,490 @@
+---
+description: ContentFlow Lite 工作流与执行规范
+alwaysApply: true
+---
+
+# Workflow Rules
+
+## 一、核心定位
+
+Workflow 是 ContentFlow Lite 的唯一业务编排中心。
+
+系统中所有业务流程必须通过 Workflow Engine 执行。
+
+Workflow 的本质是一个**确定性的执行管线（Pipeline）**，负责串联：
+
+- Prompt 构建
+- AI 调用
+- 数据解析
+- DTO 生成
+- 输出分发
+
+---
+
+## 二、Workflow 核心原则
+
+### 1. 唯一入口原则
+
+Workflow 是系统唯一业务入口。
+
+任何业务请求必须经过 Workflow。
+
+禁止：
+
+- 页面直接调用 AI Provider
+- 页面直接调用 Parser
+- 页面直接操作 Storage
+- 页面直接调用 Exporter
+
+所有行为必须通过 Workflow 统一调度。
+
+---
+
+### 2. 无状态原则（Stateless）
+
+Workflow 不允许保存任何业务状态。
+
+所有输入必须来自：
+
+- 用户请求参数
+- Store 临时状态
+- Prompt Template
+- Repository 查询结果
+
+Workflow 执行结束后不得保留任何中间状态。
+
+---
+
+### 3. 串行执行原则
+
+Workflow 执行必须遵循固定顺序：
+
+```text
+Input → Prompt → AI → Parse → DTO → Output
+```
+
+禁止：
+
+- 跳过 Parser
+- 跳过 Prompt Builder
+- 直接返回 AI Response
+- 直接操作 Exporter
+
+---
+
+## 三、Workflow 执行结构
+
+Workflow 是由多个 Node 组成的 Pipeline。
+
+每个 Node 只负责一个步骤。
+
+```text
+Input Node
+    ↓
+Prompt Node
+    ↓
+Provider Node
+    ↓
+Parse Node
+    ↓
+DTO Node
+    ↓
+Output Node
+```
+
+---
+
+## 四、Workflow Node 规范
+
+### Input Node
+
+职责：
+
+- 接收用户输入
+- 参数校验
+- 基础字段补全
+
+禁止：
+
+- 调用 AI
+- 拼接 Prompt
+- 解析数据
+
+---
+
+### Prompt Node
+
+职责：
+
+- 调用 Prompt Builder
+- 生成 Final Prompt
+- 注入 Prompt Version
+- 绑定平台信息
+
+禁止：
+
+- 调用 AI
+- 修改 DTO
+- 处理业务逻辑
+
+---
+
+### Provider Node
+
+职责：
+
+- 调用 AI Provider
+- 获取 Raw Response
+- 返回原始数据
+
+禁止：
+
+- 解析 JSON
+- 修改 Prompt
+- 结构化数据
+
+---
+
+### Parse Node
+
+职责：
+
+- 调用 Parser
+- 校验 Raw Response
+- 构建 Content DTO
+
+这是 Workflow 中唯一允许处理结构化数据的阶段。
+
+禁止：
+
+- 调用 AI
+- 修改 Prompt
+- 操作 Storage
+
+---
+
+### DTO Node
+
+职责：
+
+- 统一封装 Content DTO
+- 注入 Metadata
+- 校验最终结构
+
+禁止：
+
+- 修改业务内容
+- 重新生成数据
+
+---
+
+### Output Node
+
+职责：
+
+- 返回 DTO
+- 分发到 Editor / Exporter
+- 更新 Store 状态
+
+禁止：
+
+- 修改 DTO
+- 触发 AI 调用
+- 修改 Workflow 流程
+
+---
+
+## 五、Workflow 数据流
+
+```text
+User Input
+    ↓
+Input Node
+    ↓
+Prompt Builder
+    ↓
+AI Provider
+    ↓
+Raw Response
+    ↓
+Parser
+    ↓
+Content DTO
+    ↓
+Editor / Exporter / Storage
+```
+
+---
+
+## 六、Workflow 调度规则
+
+Workflow 必须遵守以下调度规则：
+
+1. 所有流程必须串行执行
+2. 任一 Node 失败必须中断流程
+3. 所有错误必须统一返回 Error Object
+4. 不允许部分执行成功后继续流程
+5. 不允许跳过 Parser
+
+---
+
+## 七、错误处理原则（基础版）
+
+Workflow 负责统一异常捕获。
+
+错误类型包括：
+
+- Input Error
+- Prompt Error
+- Provider Error
+- Parse Error
+- DTO Error
+
+Workflow 必须：
+
+- 捕获所有异常
+- 统一格式返回
+- 不允许抛出未处理异常
+
+---
+
+## 八、扩展机制（基础）
+
+Workflow 支持节点扩展，但必须遵循：
+
+- 不允许修改已有 Node 行为
+- 只能新增 Node
+- 新 Node 必须插入 Pipeline
+- 不允许改变基础顺序（Input → DTO）
+
+---
+
+## 九、禁止事项（核心）
+
+Workflow 层禁止：
+
+- 直接访问 UI
+- 直接操作 DOM
+- 直接访问 Storage
+- 绕过 Parser
+- 绕过 Prompt Builder
+- 直接调用 Exporter（必须通过 Output Node）
+- 保存任何业务状态
+---
+
+## 十、完整生命周期（增强版）
+
+Workflow 的完整生命周期必须严格按照以下阶段执行：
+
+```text
+1. Input 收集
+2. 参数校验
+3. Prompt 构建
+4. AI 调用
+5. 原始结果接收
+6. 数据解析
+7. DTO 构建
+8. 元数据注入
+9. 输出分发
+```
+
+每一个阶段必须具备**明确输入与输出契约**。
+
+禁止任何“隐式处理”或“跳阶段执行”。
+
+---
+
+## 十一、错误处理体系（增强版）
+
+Workflow 必须实现统一错误处理机制。
+
+### 1. 错误必须中断流程
+
+任何 Node 发生错误时：
+
+- 必须立即终止 Workflow
+- 不允许继续执行后续节点
+- 不允许返回部分结果
+
+---
+
+### 2. 错误标准结构
+
+所有错误必须符合统一结构：
+
+```ts
+interface WorkflowError {
+  code: string;
+  message: string;
+  node: string;
+  timestamp: string;
+  detail?: unknown;
+}
+```
+
+---
+
+### 3. 错误分类
+
+| 类型 | 说明 |
+|------|------|
+| INPUT_ERROR | 参数错误 |
+| PROMPT_ERROR | Prompt 构建失败 |
+| PROVIDER_ERROR | AI 调用失败 |
+| PARSE_ERROR | JSON 解析失败 |
+| DTO_ERROR | 数据结构错误 |
+| UNKNOWN_ERROR | 未知错误 |
+
+---
+
+## 十二、重试机制（Retry Policy）
+
+Workflow 允许对 Provider Node 进行有限重试。
+
+### 规则如下：
+
+- 仅 Provider Node 可重试
+- 最大重试次数：3 次
+- 仅网络或模型错误允许重试
+- Parse 错误禁止重试
+
+---
+
+### 重试流程：
+
+```text
+Provider Error
+     ↓
+Retry Attempt (max 3)
+     ↓
+Success → Continue Workflow
+     ↓
+Fail → Abort Workflow
+```
+
+---
+
+## 十三、日志与可观测性（Observability）
+
+Workflow 必须具备完整执行日志。
+
+### 每次执行必须记录：
+
+- Workflow ID
+- Prompt Version
+- AI Model
+- 输入参数
+- 每个 Node 执行时间
+- 错误信息（如有）
+- 最终 DTO hash
+
+---
+
+### 日志用途：
+
+- 调试问题
+- Prompt 优化
+- 模型效果对比
+- 性能分析
+
+---
+
+## 十四、Prompt Version 强绑定规则
+
+Workflow 在 Prompt Node 中必须：
+
+- 获取当前 Prompt Version
+- 绑定到本次执行上下文
+- 写入 Metadata
+
+禁止：
+
+- 使用未版本化 Prompt
+- 动态修改 Prompt Version
+- 覆盖历史 Version
+
+---
+
+## 十五、DTO 输出规范
+
+Workflow 输出必须是唯一标准结构：
+
+> Content DTO
+
+禁止输出：
+
+- Raw Response
+- 半结构数据
+- 未解析 JSON
+- 页面专用结构
+
+---
+
+## 十六、并发与一致性规则
+
+Workflow 默认采用**单请求串行模型**。
+
+禁止：
+
+- 并行执行 Node
+- 多 Provider 同时调用（除非显式扩展）
+- 并发修改同一个 DTO
+
+---
+
+## 十七、扩展节点规则（高级）
+
+允许新增 Node，但必须满足：
+
+- 不修改已有 Node
+- 不改变主流程顺序
+- 必须显式注册
+- 必须声明输入输出类型
+
+---
+
+## 十八、执行顺序不可变性
+
+Workflow 核心执行顺序不可更改：
+
+```text
+Input → Prompt → Provider → Parse → DTO → Output
+```
+
+任何扩展必须插入在 Output 之后或 Provider 之后的扩展层。
+
+禁止破坏主链路。
+
+---
+
+## 十九、最终约束（最高优先级）
+
+Workflow 是系统的“唯一真相执行器”。
+
+任何违反以下规则的行为都属于架构错误：
+
+- 绕过 Workflow
+- 绕过 Parser
+- 绕过 Prompt Builder
+- 直接操作 DTO 以外数据结构
+- 页面直接访问 AI
+- Storage 参与业务逻辑
+
+---
+
+## 二十、总结
+
+Workflow 是 ContentFlow Lite 的核心控制器。
+
+它的职责不是“执行逻辑”，而是：
+
+> **定义系统唯一可靠的执行路径**
+
+所有业务必须：
+
+- 可被 Workflow 调度
+- 可被 Parser 标准化
+- 可被 DTO 表达
+- 可被 Exporter 导出
+
+任何不符合 Workflow 的行为，都不属于系统合法执行路径。

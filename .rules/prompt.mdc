@@ -1,0 +1,295 @@
+---
+description: ContentFlow Lite Prompt 体系与生成规范
+alwaysApply: true
+---
+
+# Prompt Rules
+
+## 一、核心定位
+
+Prompt 是 ContentFlow Lite 的内容生成核心资产。
+
+所有 AI 输出质量，完全由 Prompt 系统决定。
+
+系统中所有 Prompt 必须具备：
+
+- 可版本化
+- 可追溯
+- 可复现
+- 可结构化
+
+任何未进入 Prompt 体系的内容生成请求，都属于非法流程。
+
+---
+
+## 二、Prompt 生命周期
+
+Prompt 的完整生命周期如下：
+
+```text
+Template
+   ↓
+Variables 注入
+   ↓
+Prompt Builder
+   ↓
+Prompt Version 绑定
+   ↓
+Final Prompt
+   ↓
+AI Execution
+```
+
+---
+
+## 三、Prompt Builder 规范
+
+Prompt Builder 是唯一允许生成 Prompt 的模块。
+
+### Builder 职责：
+
+- 读取 Template
+- 注入变量
+- 注入 Metadata
+- 绑定 Prompt Version
+- 生成 Final Prompt
+
+---
+
+### Builder 禁止行为：
+
+- 不得调用 AI
+- 不得保存数据
+- 不得解析 Response
+- 不得修改 DTO
+- 不得参与 Workflow 控制
+
+---
+
+## 四、Prompt Template 规范
+
+Template 是 Prompt 的静态定义。
+
+### 必须包含：
+
+- 角色定义（Role）
+- 输出格式约束
+- 内容结构要求
+- 平台规则
+- 禁止行为说明
+
+---
+
+### Template 示例结构：
+
+```text
+你是一名内容创作者。
+
+请根据以下要求生成内容：
+
+主题：{{topic}}
+平台：{{platform}}
+
+要求：
+1. 生成标题
+2. 生成封面文案
+3. 分页输出正文
+4. 输出标签
+5. 必须返回 JSON
+6. 必须符合 Content DTO 结构
+```
+
+---
+
+## 五、Variables 规则
+
+变量由 Workflow 提供。
+
+允许变量包括：
+
+- topic
+- platform
+- audience
+- tone
+- extra_requirements
+
+---
+
+### 禁止行为：
+
+- 页面拼接变量
+- Builder 内部生成业务变量
+- AI 自动生成变量
+- Prompt 中硬编码业务数据
+
+---
+
+## 六、Prompt Version 规范
+
+Prompt Version 是系统核心机制之一。
+
+### 每次生成必须记录：
+
+- Prompt ID
+- Prompt Version
+- Model
+- Platform
+- Timestamp
+
+---
+
+### Version 规则：
+
+- Version 必须不可变
+- 修改 Prompt 必须生成新 Version
+- 历史 Version 不可覆盖
+- 不允许动态修改 Version 内容
+
+---
+
+### Version 作用：
+
+- 内容可复现
+- AI 输出可对比
+- Prompt 优化可追踪
+
+---
+
+## 七、Final Prompt 规则
+
+Final Prompt 是最终发送给 AI 的内容。
+
+### 必须满足：
+
+- 完整 Template + Variables
+- 包含 Prompt Version 信息
+- 不可二次修改
+- 不可在 Provider 内拼接
+
+---
+
+### 禁止：
+
+- Provider 修改 Prompt
+- Workflow 动态拼接 Prompt
+- 页面直接生成 Prompt
+
+---
+
+## 八、平台 Prompt 规范
+
+不同平台必须使用不同 Template：
+
+### 小红书：
+
+- 强调标题吸引力
+- 分段短内容
+- 标签明确
+
+### 抖音：
+
+- 强调节奏感
+- 口语化表达
+- 适合脚本结构
+
+### 公众号：
+
+- 长内容结构
+- 分章节
+- 逻辑严密
+
+---
+
+## 九、Prompt 输出结构规范
+
+AI 必须输出标准 JSON：
+
+```json
+{
+  "titles": [],
+  "cover": {},
+  "pages": [],
+  "tags": [],
+  "summary": ""
+}
+```
+
+不得返回：
+
+- 非结构化文本
+- Markdown 混排 JSON
+- 多种格式混合输出
+
+---
+
+## 十、Prompt 错误处理
+
+Prompt 相关错误必须由 Workflow 处理：
+
+| 类型 | 说明 |
+|------|------|
+| TEMPLATE_ERROR | 模板错误 |
+| VARIABLE_ERROR | 变量缺失 |
+| VERSION_ERROR | 版本不存在 |
+| BUILD_ERROR | Prompt 构建失败 |
+
+---
+
+## 十一、Prompt 扩展规则
+
+允许新增：
+
+- 新 Template
+- 新 Platform Prompt
+- 新变量类型
+
+禁止：
+
+- 修改已有 Template 结构
+- 覆盖历史 Prompt Version
+- 在运行时动态修改 Prompt 结构
+
+---
+
+## 十二、Prompt 与 DTO 绑定关系
+
+Prompt 输出必须严格匹配 Content DTO：
+
+- titles → Title[]
+- cover → Cover
+- pages → Page[]
+- tags → string[]
+- summary → string
+
+任何不匹配结构必须在 Parser 阶段修正或丢弃。
+
+---
+
+## 十三、Prompt 安全规则
+
+禁止 Prompt 包含：
+
+- 系统指令泄露
+- 内部架构信息
+- 非结构化输出要求
+- 非 JSON 输出要求
+
+Prompt 必须强制约束 AI 输出结构。
+
+---
+
+## 十四、总结
+
+Prompt 系统是 ContentFlow Lite 的核心质量控制器。
+
+所有内容质量取决于：
+
+- Prompt Template 设计
+- Prompt Builder 规范
+- Prompt Version 管理
+
+任何绕过 Prompt 系统的生成方式都属于非法路径。
+
+Prompt 系统必须保证：
+
+> 结构稳定 + 可复现 + 可演进

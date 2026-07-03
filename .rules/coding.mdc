@@ -1,0 +1,339 @@
+---
+description: ContentFlow Lite 编码规范
+alwaysApply: true
+---
+
+# Coding Rules
+
+## 一、核心目标
+
+本规范用于统一 ContentFlow Lite 的代码风格与工程实现方式。
+
+所有开发行为必须遵循：
+
+- 可维护性优先
+- 结构清晰优先
+- 可扩展优先
+- 明确依赖优先
+
+禁止为了“快速实现”破坏架构规范。
+
+---
+
+## 二、技术栈约束
+
+项目固定技术栈：
+
+- Vue 3
+- TypeScript
+- Pinia
+- Vite
+
+禁止引入：
+
+- 未经规范批准的状态管理库
+- 非必要的全局依赖
+- 混乱的多范式代码结构
+
+---
+
+## 三、目录规范
+
+所有代码必须按照职责划分：
+
+- pages：页面层（禁止业务逻辑）
+- components：通用组件
+- workflow：业务调度
+- prompt：Prompt 体系
+- parser：解析逻辑
+- services：服务层
+- repositories：数据访问
+- models：数据模型（DTO）
+- utils：纯工具函数
+
+---
+
+## 四、DTO 使用规范（极其重要）
+
+Content DTO 是唯一数据结构。
+
+### 必须：
+
+- 所有数据必须来源于 DTO
+- 所有页面必须绑定 DTO
+- 所有导出必须使用 DTO
+
+---
+
+### 禁止：
+
+- 页面自定义 Content 结构
+- 临时 JSON 结构作为业务数据
+- 多版本 DTO 并存
+- 修改 DTO 结构用于页面适配
+
+---
+
+## 五、TypeScript 规范
+
+### 1. 类型必须显式声明
+
+禁止：
+
+```ts
+const data = {}
+```
+
+必须：
+
+```ts
+const data: Content = {}
+```
+
+---
+
+### 2. Interface 优先
+
+所有数据结构必须使用 interface：
+
+- Content
+- Page
+- Title
+- Metadata
+
+---
+
+### 3. 禁止 any
+
+除非极端兼容性场景，否则禁止使用 any。
+
+---
+
+## 六、Vue 规范
+
+### 1. 页面职责单一
+
+页面只能负责：
+
+- 数据展示
+- 用户交互
+- 调用 Workflow
+
+---
+
+### 2. 禁止逻辑堆积
+
+页面中禁止出现：
+
+- Prompt 拼接
+- Parser 调用
+- Storage 访问
+- AI 请求
+
+---
+
+### 3. Composition API 使用规范
+
+统一使用 setup 结构：
+
+```ts
+setup() {
+  const store = useStore()
+  const workflow = useWorkflow()
+
+  return {}
+}
+```
+
+---
+
+## 七、Workflow 调用规范
+
+所有业务必须通过 Workflow：
+
+### 正确：
+
+```ts
+workflow.generateContent(params)
+```
+
+### 错误：
+
+```ts
+ai.generate()
+parser.parse()
+storage.save()
+```
+
+---
+
+## 八、Parser 使用规范
+
+Parser 只能由 Workflow 调用。
+
+禁止：
+
+- 页面调用 Parser
+- Exporter 调用 Parser
+- Storage 调用 Parser
+
+Parser 必须保持纯函数特性。
+
+---
+
+## 九、Repository 规范
+
+所有数据操作必须通过 Repository。
+
+### 必须：
+
+- save()
+- get()
+- delete()
+- list()
+
+---
+
+### 禁止：
+
+- 直接操作 localStorage
+- 在页面写存储逻辑
+- 在 Workflow 内写存储细节
+
+---
+
+## 十、命名规范
+
+### 变量命名：
+
+- camelCase
+
+### 类 / Interface：
+
+- PascalCase
+
+### 文件命名：
+
+- 小写 + 连字符（kebab-case）
+
+---
+
+## 十一、函数规范
+
+### 单一职责原则
+
+每个函数只做一件事。
+
+---
+
+### 禁止：
+
+- 一个函数包含多层业务逻辑
+- 在函数内同时调用 AI + Parser + Storage
+
+---
+
+## 十二、错误处理规范
+
+所有错误必须统一处理：
+
+```ts
+interface AppError {
+  code: string
+  message: string
+  module: string
+}
+```
+
+---
+
+### 禁止：
+
+- throw string
+- console.error 替代错误处理
+- 页面直接处理业务错误
+
+---
+
+## 十三、状态管理规范
+
+Pinia Store 仅用于：
+
+- UI 状态
+- 临时状态
+- Workflow 输入输出缓存
+
+---
+
+禁止：
+
+- 在 Store 中写业务逻辑
+- 在 Store 中调用 AI
+- 在 Store 中解析数据
+
+---
+
+## 十四、Git 规范
+
+### Commit 格式：
+
+```text
+feat: 新功能
+fix: 修复问题
+refactor: 重构代码
+docs: 文档更新
+style: 样式修改
+```
+
+---
+
+### 禁止：
+
+- 无意义 commit
+- 混合多个功能 commit
+- 直接提交未测试代码
+
+---
+
+## 十五、代码分层原则
+
+必须严格遵守：
+
+```text
+UI → Workflow → Services → Domain → Infrastructure
+```
+
+禁止：
+
+- UI 直接访问 Infrastructure
+- Service 绕过 Workflow
+- Parser 被 UI 调用
+
+---
+
+## 十六、性能规范
+
+- 避免重复计算
+- 避免在页面层做复杂逻辑
+- Workflow 内禁止阻塞调用链
+- Parser 必须高效纯函数实现
+
+---
+
+## 十七、安全规范
+
+禁止：
+
+- 将 API Key 写入前端
+- 在页面暴露 Prompt
+- 在日志中输出敏感数据
+
+---
+
+## 十八、总结
+
+Coding Rules 的核心目标是：
+
+> 保证所有代码围绕 Workflow + DTO + Prompt 三大核心稳定运行
+
+任何违反该规则的代码，都视为架构违规代码，必须重构。
