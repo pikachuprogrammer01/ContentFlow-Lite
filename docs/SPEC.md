@@ -321,7 +321,6 @@ Storage 保存 DTO。
 - Prompt ID
 - Prompt Version
 - AI 模型
-- Temperature
 - 创建时间
 
 Prompt Version 一经创建，不允许修改。
@@ -861,7 +860,6 @@ Generation Record 必须记录：
 - Prompt ID
 - Prompt Version
 - AI Model
-- Temperature
 - Timestamp
 
 通过 Prompt Version，系统应能够完整复现一次内容生成环境。

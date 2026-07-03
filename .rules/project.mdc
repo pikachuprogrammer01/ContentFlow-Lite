@@ -39,7 +39,7 @@ AI 模型决策受 `.rules/provider.mdc` 约束，这里列出简洁摘要：
 | 缓存 | Redis（可选，API Key 热缓存） |
 
 - 八张核心表：`users` / `contents` / `prompt_templates` / `prompt_versions` / `generation_records` / `user_settings` / `publish_records` / `app_logs`
-- 前端 `LocalStorageRepository` 保留作为离线缓存，新增 `HttpRepository` 走后端 API
+- 无离线模式。前端通过 `HttpRepository` 走后端 API，数据库不可用时 App 不可用。
 
 ---
 

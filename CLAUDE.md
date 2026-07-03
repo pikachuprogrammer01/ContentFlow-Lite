@@ -134,10 +134,10 @@ rules/backend.mdc
 - AdminJS 数据库管理面板（仅 admin 可访问）
 - 配置系统（.env + config.json 三层 + Redis API Key 缓存，Redis 可选）
 - 安全规范（bcrypt / rate limit / helmet / CORS / SQL 注入防护）
-- 离线降级策略（数据库不可用时自动切换 localStorage）
+- 无离线模式（数据库不可用时 App 不可用，不做 localStorage 缓存）
 - 后端禁止含业务逻辑（路由只做校验 → repository 只做 CRUD）
 
-后端使用 Express + AdminJS + Redis（可选），八张 MySQL 兼容表，前端 localStorage 离线降级。
+后端使用 Express + AdminJS + Redis（可选），八张 MySQL 兼容表。
 
 ---
 
@@ -173,7 +173,7 @@ Parser
  ↓
 Content DTO
  ↓
-Export / Storage（前端 localStorage + 后端 MySQL 兼容数据库）
+Export / Storage（后端 MySQL 兼容数据库）
 ```
 
 ---

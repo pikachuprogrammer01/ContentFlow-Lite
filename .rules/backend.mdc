@@ -109,6 +109,7 @@ CREATE TABLE contents (
   pages       JSON          NOT NULL COMMENT 'Page[] 数组',
   tags        JSON          NOT NULL COMMENT 'string[] 标签',
   summary     TEXT          COMMENT '内容摘要',
+  extra_requirements TEXT   COMMENT '用户输入的补充要求',
   metadata    JSON          NOT NULL COMMENT 'Metadata {promptId, version, model...}',
   created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -126,6 +127,7 @@ CREATE TABLE prompt_templates (
   user_id       VARCHAR(64)   NOT NULL COMMENT '所属用户',
   name          VARCHAR(200)  NOT NULL COMMENT '模板名称',
   type          ENUM('text','image') NOT NULL DEFAULT 'text' COMMENT '模板类型：text=文字生成，image=图片生成',
+  is_default    TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '是否默认模板',
   platform      VARCHAR(50)   NOT NULL COMMENT '目标平台（文字模板）/ 图片风格标识（图片模板）',
   system_prompt TEXT          NOT NULL COMMENT 'System Prompt 内容',
   user_prompt   TEXT          NOT NULL COMMENT 'User Prompt 模板（含 {{变量}}）',
@@ -386,7 +388,9 @@ router.beforeEach((to, from, next) => {
 配置优先级：界面保存值 > config.json > .env 默认值
 
 .env                ← 启动默认值（DB 连接 / JWT Secret）
-server/config.json  ← 用户通过设置页覆盖（不写死在代码里）
+server/config.json  ← 用户通过设置页覆盖
+  字段：{ host, port, user, password, database }
+  与 .env 中 DB_* 字段一一对应
 DB user_settings    ← API Key 等用户级业务配置（存于所连接数据库中）
 Redis（可选）       ← API Key 热缓存
 
@@ -625,10 +629,10 @@ interface APIError {
 ### 10.1 数据存取层
 
 ```
-离线模式：LocalStorageRepository → localStorage
-在线模式：HttpRepository → Express API → 数据库
-降级策略：数据库不可用 → 自动切换 LocalStorageRepository → UI 显示「离线模式」
+HttpRepository → Express API → 数据库
 ```
+
+无离线模式。数据库不可用时 App 显示「服务不可用」错误页，不允许任何操作。
 
 ### 10.2 前端新增模块
 
@@ -642,16 +646,14 @@ interface APIError {
 
 ### 10.3 离线降级
 
+无离线模式。数据库不可用时显示错误页。
+
 ```ts
 // src/repositories/index.ts
 import { HttpRepository } from './http-repository';
-import { LocalStorageRepository } from './local-storage-repository';
 
 export function createRepository<T extends { id: string }>(collectionName: string): Repository<T> {
-  if (import.meta.env.VITE_API_BASE_URL) {
-    return new HttpRepository<T>(collectionName);
-  }
-  return new LocalStorageRepository<T>(collectionName);
+  return new HttpRepository<T>(collectionName);
 }
 ```
 
@@ -673,3 +675,8 @@ export function createRepository<T extends { id: string }>(collectionName: strin
 | 2026-07-03 | 不选 Next.js | 前端已是 Vue |
 | 2026-07-03 | 新增 publish_records 表 | 不做平台 API 对接，记录用户手动发布轨迹 |
 | 2026-07-03 | 新增 app_logs 表 + Logger 模块 | winston(后端) + loglevel(前端)，对标 Spring Boot 日志级别 |
+| 2026-07-03 | 无离线模式 | 数据库不可用时 App 不可用，不做 localStorage 离线缓存 |
+| 2026-07-03 | extraRequirements 存入 contents 表 | 重试时需要用到用户原始补充要求 |
+| 2026-07-03 | 默认 Prompt = 用户最新模板 | 自动设置，支持手动切换。is_default 列标记 |
+| 2026-07-03 | 版本号系统生成 V1→V2→V3 | 不允许用户手动输入版本号 |
+| 2026-07-03 | SPEC 去掉 Temperature 记录 | 内容生成场景不需要记录模型温度参数 |
