@@ -18,6 +18,7 @@ alwaysApply: true
 | 密码哈希 | **bcryptjs** | cost=12 |
 | 安全头 | **helmet** | HTTP 安全头 |
 | 限流 | **express-rate-limit** | 登录接口 5 次/分钟/IP |
+| 缓存 | **Redis**（可选） | API Key 热缓存，不配则直接查 DB |
 | 部署 | Node.js 服务 | 与前端分离部署 |
 
 ### 选型理由
@@ -274,7 +275,7 @@ router.beforeEach((to, from, next) => {
 
 ## 七、配置系统
 
-### 7.1 双层配置
+### 7.1 三层配置
 
 ```
 配置优先级：界面保存值 > config.json > .env 默认值
@@ -282,6 +283,9 @@ router.beforeEach((to, from, next) => {
 .env                ← 启动默认值（DB 连接 / JWT Secret）
 server/config.json  ← 用户通过设置页覆盖（不写死在代码里）
 DB user_settings    ← API Key 等用户级业务配置（存于所连接数据库中）
+Redis（可选）       ← API Key 热缓存
+
+Redis 不配也能跑：未设置 REDIS_URL 则跳过 Redis 直接查 DB。
 ```
 
 ### 7.2 环境变量
@@ -294,6 +298,7 @@ DB_PASSWORD=      # 密码
 DB_DATABASE=      # 数据库名
 JWT_SECRET=         # JWT 签名密钥（生产环境必须换强随机值）
 JWT_REFRESH_SECRET= # Refresh Token 签名密钥
+REDIS_URL=          # Redis 连接（可选，不配则跳过 Redis）
 ```
 
 ### 7.3 数据库配置热切换
@@ -303,28 +308,52 @@ JWT_REFRESH_SECRET= # Refresh Token 签名密钥
 3. 成功 → 写 `config.json` → 切换连接池 → 返回成功
 4. 失败 → 不写文件，返回错误信息，连接池保持原样
 
-### 7.4 API Key 存取（闭包缓存）
+### 7.4 API Key 存取（Redis + DB 两层缓存）
+
+不再使用闭包内存缓存，避免多实例数据不一致。Redis 为主缓存，DB 为持久化存储。
 
 ```ts
 // server/db/api-key-store.ts
-// 利用模块闭包特性：import 后常驻进程，DB 不可用时从内存读
 
-let memoryCache: Record<string, string> | null = null;
+import Redis from 'ioredis';
+
+const redis = process.env.REDIS_URL ? new Redis(process.env.REDIS_URL) : null;
 
 export async function getApiKey(userId: string, platform: string): Promise<string | null> {
-  if (memoryCache) return memoryCache[`${userId}:${platform}`] ?? null;
-  const rows = await db.query('SELECT `key`, `value` FROM user_settings WHERE user_id = ?', [userId]);
-  memoryCache = Object.fromEntries(rows.map(r => [`${userId}:${r.key}`, r.value]));
-  return memoryCache[`${userId}:${platform}`] ?? null;
+  const cacheKey = `apikey:${userId}:${platform}`;
+
+  // 1. Redis（如果配置了）
+  if (redis) {
+    const cached = await redis.get(cacheKey);
+    if (cached) return cached;
+  }
+
+  // 2. DB
+  const [row] = await db.query(
+    'SELECT `value` FROM user_settings WHERE user_id = ? AND `key` = ?',
+    [userId, `${platform}_api_key`]
+  );
+  if (!row) return null;
+
+  // 3. 回写 Redis（TTL 1h）
+  if (redis) {
+    await redis.set(cacheKey, row.value, 'EX', 3600);
+  }
+  return row.value;
 }
 
 export async function setApiKey(userId: string, platform: string, key: string): Promise<void> {
+  // 写 DB
   await db.query(
     'INSERT INTO user_settings (user_id, `key`, `value`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `value` = ?',
     [userId, `${platform}_api_key`, key, key]
   );
-  if (!memoryCache) memoryCache = {};
-  memoryCache[`${userId}:${platform}_api_key`] = key;
+
+  // 刷新 Redis
+  if (redis) {
+    const cacheKey = `apikey:${userId}:${platform}`;
+    await redis.set(cacheKey, key, 'EX', 3600);
+  }
 }
 ```
 
@@ -380,7 +409,8 @@ app.use(admin.options.rootPath, adminRouter);
 |---|---|
 | 数据库连接配置 + 测试连接 | 手写 Vue 表单 → Express 路由 |
 | 表结构浏览 + 记录管理 | **AdminJS** 自动生成（零前端代码） |
-| API Key 管理 | 手写 Vue 表单 → 存 `user_settings` 表 + 闭包内存缓存 |
+| API Key 管理 | 手写 Vue 表单 → 存 `user_settings` 表 → Redis 热缓存 |
+| 账单查询 | 不自行计算。每个平台旁放「查看账单」链接，跳转对应官网供用户自助查看 |
 
 ---
 
@@ -509,7 +539,8 @@ export function createRepository<T extends { id: string }>(collectionName: strin
 | 2026-07-03 | 加入用户系统（users 表） | 数据库管理需要权限控制 |
 | 2026-07-03 | 认证 = JWT + bcryptjs | 无状态、适合 SPA、Express 生态 |
 | 2026-07-03 | 数据库管理 = AdminJS + TypeORM | 自动生成 CRUD 界面，零前端代码 |
-| 2026-07-03 | API Key 闭包缓存 | DB 不可用时从内存读取，兜底保障 |
+| 2026-07-03 | API Key 缓存 = Redis + DB（去掉闭包内存） | 避免多实例数据不一致，Redis 可选 |
+| 2026-07-03 | 不做用量估算 | 各平台无公开余额 API，放账单链接让用户去官网查 |
 | 2026-07-03 | 双层配置（.env + config.json） | 数据库配置不在代码中写死 |
 | 2026-07-03 | 不选 Next.js | 前端已是 Vue |
-| 2026-07-03 | 不选 NestJS | 项目规模不大时过度工程 |
+| 2026-07-03 | Redis 可选 | 不配则直接查 DB，零额外依赖启动 |
