@@ -59,11 +59,31 @@ alwaysApply: true
 
 ## 三、图片生成（Image Generation）
 
-### 3.1 默认方案
+### 3.1 默认方案：双模型策略
 
 | 角色 | 模型 | 接入方式 | 说明 |
 |------|------|----------|------|
-| **唯一默认** | FLUX.1 [schnell] | Together AI API | Apache 2.0 开源，零成本 API |
+| **主模型** | FLUX.1 [schnell] | 硅基流动 SiliconFlow API | 无需绑卡，1000 张/月免费，Apache 2.0 开源 |
+| **兜底模型** | 通义万相 2.0 | 阿里云 DashScope API | 国产画质天花板，中文 prompt 原生理解 |
+
+### 3.2 切换逻辑
+
+```
+图片生成请求 → 硅基流动 (FLUX.1 schnell)
+                    │
+                    ├── 成功 → 返回图片
+                    │
+                    └── 失败/超时/限流 → 阿里云通义万相
+                                              │
+                                              ├── 成功 → 返回图片
+                                              │
+                                              └── 失败 → 返回错误给用户
+```
+
+实现要求：
+- 每次生成只切换一次
+- 切换时记录日志
+- 通义万相中文 prompt 不需要翻译，FLUX 需要将中文 prompt 翻译为英文
 
 ### 3.2 模型能力要求
 
@@ -75,10 +95,17 @@ alwaysApply: true
 
 ### 3.3 成本参考
 
-| 接入方式 | 单张成本 | 说明 |
-|----------|---------|------|
-| Together AI (FLUX.1 schnell) | ~$0.001/张 | 新用户送 $1 额度 ≈ 1000 张 |
-| 阿里云通义万相 | ¥0.02-0.05/张 | 中文 prompt 理解更好，作为备选 |
+| 平台 | 模型 | 免费额度 | 超出后单价 | 是否需要绑卡 |
+|------|------|----------|-----------|-------------|
+| 硅基流动 | FLUX.1 schnell | 1000 张/月 | ¥0.02-0.10/张 | ❌ 不需要 |
+| 阿里云通义万相 | 通义万相 2.0 | 100-200 张（新用户） | ¥0.04-0.10/张 | ❌ 不需要（需实名） |
+
+### 3.4 选型依据
+
+- ❌ Together AI — 免费额度需要绑信用卡，淘汰
+- ❌ Replicate — 同样需要绑卡，且需翻墙，淘汰
+- ✅ 硅基流动 — 国内原生、无需绑卡、FLUX 同款模型、免费额度最慷慨
+- ✅ 通义万相 — 中文 prompt 理解远超 FLUX，生成小红书封面时不需要翻译成英文
 
 ---
 
@@ -125,9 +152,10 @@ interface ImageProvider {
 ### 5.1 开发环境
 
 ```
-VITE_GEMINI_API_KEY=     # Google AI Studio
-VITE_DEEPSEEK_API_KEY=   # DeepSeek Platform
-VITE_TOGETHER_API_KEY=   # Together AI
+VITE_GEMINI_API_KEY=        # Google AI Studio
+VITE_DEEPSEEK_API_KEY=      # DeepSeek Platform
+VITE_SILICONFLOW_API_KEY=   # 硅基流动 SiliconFlow
+VITE_TONGYI_API_KEY=        # 阿里云 DashScope（通义万相）
 ```
 
 ### 5.2 生产环境
@@ -138,11 +166,12 @@ VITE_TOGETHER_API_KEY=   # Together AI
 
 ### 5.3 获取 API Key
 
-| 平台 | 注册地址 | 新用户福利 |
-|------|---------|-----------|
-| Google AI Studio | aistudio.google.com | 免费层，无需付费 |
-| DeepSeek | platform.deepseek.com | 新用户送 ¥10 额度 |
-| Together AI | together.ai | 新用户送 $1 额度 |
+| 平台 | 注册地址 | 新用户福利 | 是否需要绑卡 |
+|------|---------|-----------|-------------|
+| Google AI Studio | aistudio.google.com | 免费层，无需付费 | ❌ |
+| DeepSeek | platform.deepseek.com | 新用户送 ¥10 额度 | ❌ |
+| 硅基流动 | siliconflow.cn | 1000 张/月免费 | ❌ |
+| 阿里云 DashScope | dashscope.aliyun.com | 100-200 张免费（新用户） | ❌（需实名） |
 
 ---
 
@@ -151,10 +180,11 @@ VITE_TOGETHER_API_KEY=   # Together AI
 ```
 src/providers/
 ├── index.ts                    # registerProvider / callProvider 入口
-├── gemini-provider.ts          # Gemini 2.0 Flash
-├── deepseek-provider.ts        # DeepSeek V4 Flash
+├── gemini-provider.ts          # Gemini 2.0 Flash（文字-主）
+├── deepseek-provider.ts        # DeepSeek V4 Flash（文字-兜底）
 ├── mock-provider.ts            # Mock（开发用，默认不启用）
-├── flux-provider.ts            # FLUX.1 schnell 图片生成
+├── flux-provider.ts            # 硅基流动 FLUX.1 schnell（图片-主）
+├── tongyi-provider.ts          # 阿里云通义万相（图片-兜底）
 └── types.ts                    # Provider 类型扩展（ImageProvider 等）
 ```
 
@@ -186,5 +216,7 @@ src/providers/
 |------|------|------|
 | 2026-07-03 | 文字主模型 = Gemini 2.0 Flash | 免费层、中文质量好、JSON 模式原生支持 |
 | 2026-07-03 | 文字兜底 = DeepSeek V4 Flash | 中文原生、成本最低、国内直连 |
-| 2026-07-03 | 图片 = FLUX.1 schnell via Together AI | 开源最强、API 成本极低、可商用 |
+| 2026-07-03 | 图片主模型 = FLUX.1 schnell via 硅基流动 | 国内原生、无需绑卡、免费额度最慷慨（1000 张/月） |
+| 2026-07-03 | 图片兜底 = 通义万相 via 阿里云 DashScope | 国产画质天花板，中文 prompt 原生理解 |
+| 2026-07-03 | 不选 Together AI / Replicate | 需要绑信用卡，或需要翻墙 |
 | 2026-07-03 | 不选 Claude / GPT-4o | 成本高、中文非原生、需要海外访问 |
