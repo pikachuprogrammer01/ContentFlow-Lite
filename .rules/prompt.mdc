@@ -294,7 +294,7 @@ Prompt 输出必须严格匹配 Content DTO：
 
 ### 默认 prompt 设计
 
-默认中文 prompt，用户始终看到中文、用中文修改。翻译为英文发给 FLUX 是 Provider 层实现细节。
+默认中文 prompt，用户始终看到中文、用中文修改。
 
 ```ts
 function buildDefaultImagePrompt(page: Page, topic: string): string {
