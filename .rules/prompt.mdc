@@ -200,25 +200,43 @@ Final Prompt 是最终发送给 AI 的内容。
 
 ---
 
-## 九、Prompt 输出结构规范
+## 九、OutputSchema — 输出结构校验
 
-AI 必须输出标准 JSON：
+每个 Prompt Template 必须附带 `outputSchema`，用于程序化校验 AI 输出是否符合预期结构。
 
-```json
-{
-  "titles": [],
-  "cover": {},
-  "pages": [],
-  "tags": [],
-  "summary": ""
+### 定义：
+
+```ts
+interface OutputSchema {
+  required: string[];
+  fieldTypes: Record<string, 'string' | 'string[]' | 'object' | 'array'>;
+  minItems?: Record<string, number>;
+  maxItems?: Record<string, number>;
 }
 ```
 
-不得返回：
+### 小红书模板示例：
 
-- 非结构化文本
-- Markdown 混排 JSON
-- 多种格式混合输出
+```ts
+{
+  required: ['titles', 'cover', 'pages', 'tags', 'summary'],
+  fieldTypes: {
+    titles: 'array', cover: 'object', pages: 'array',
+    tags: 'string[]', summary: 'string'
+  },
+  minItems: { titles: 5, pages: 6, tags: 5 },
+  maxItems: { titles: 10, pages: 8, tags: 10 }
+}
+```
+
+### 校验规则：
+
+- required 字段全部存在 → 通过
+- 字段类型匹配 → 通过
+- 数组长度在 minItems~maxItems 之间 → 通过
+- 任一不通过 → Validate Node 触发重试（将失败原因注入 prompt）
+
+禁止：没有 outputSchema 的 Template 投入生产、用文字描述代替结构化 schema。
 
 ---
 
@@ -265,20 +283,51 @@ Prompt 输出必须严格匹配 Content DTO：
 
 ---
 
-## 十三、Prompt 安全规则
+## 十三、图片 Prompt 规范（新增）
 
-禁止 Prompt 包含：
+文字生成完成后，Page 的 `imagePrompt` 字段用于配图生成。
 
-- 系统指令泄露
-- 内部架构信息
-- 非结构化输出要求
-- 非 JSON 输出要求
+### 来源优先级：
 
-Prompt 必须强制约束 AI 输出结构。
+1. **用户手动输入** — 用户在编辑页为该 Page 填写 → 优先使用
+2. **系统默认** — 用户未填写 → 使用默认模板
+
+### 默认 prompt 设计（不过度设计）：
+
+```ts
+function buildDefaultImagePrompt(page: Page): string {
+  return `${page.title} - ${page.content.slice(0, 100)}, clean illustration style`;
+}
+```
+
+简单拼接 page.title + 100 字正文摘要 + 干净风格，英文输出（FLUX 友好）。
+
+### 触发规则：
+
+- **必须用户手动点击**「生成配图」按钮，绝不自动生成
+- 生成前用户可修改 prompt
+- 调用图片 Provider → 返回 URL → 写入 `page.imageUrl`
+
+### Page 类型扩展：
+
+```ts
+interface Page {
+  id: string;
+  title: string;
+  content: string;
+  imagePrompt?: string;     // 图片 prompt（用户填或系统默认）
+  imageUrl?: string;        // 生成后的图片 URL
+  imageStatus?: 'idle' | 'generating' | 'done' | 'error';
+}
+```
 
 ---
 
-## 十四、总结
+## 十四、Prompt 安全规则
+
+---
+
+## 十五、总结
 
 Prompt 系统是 ContentFlow Lite 的核心质量控制器。
 

@@ -60,7 +60,7 @@ Workflow 执行结束后不得保留任何中间状态。
 Workflow 执行必须遵循固定顺序：
 
 ```text
-Input → Prompt → AI → Parse → DTO → Output
+Input → Prompt → Provider → Parse → Validate → DTO → Output
 ```
 
 禁止：
@@ -87,10 +87,14 @@ Provider Node
     ↓
 Parse Node
     ↓
+Validate Node
+    ↓
 DTO Node
     ↓
 Output Node
 ```
+
+共七个节点。Validate Node 是 Parse 之后的质量关卡，不通过则触发重试。
 
 ---
 
@@ -136,11 +140,18 @@ Output Node
 - 调用 AI Provider
 - 获取 Raw Response
 - 返回原始数据
+- **支持重试（含 Validate Node 反馈）**
+
+重试规则：
+
+- 网络/模型错误：最多重试 3 次
+- Validate Node 校验失败：最多重试 3 次，每次将失败原因注入 prompt 让 AI 修正
+- 重试由 Validate Node 触发，不是 Provider 内部循环
 
 禁止：
 
 - 解析 JSON
-- 修改 Prompt
+- 修改 Prompt（重试注入由 Workflow 层完成，非 Provider 负责）
 - 结构化数据
 
 ---
@@ -159,6 +170,35 @@ Output Node
 
 - 调用 AI
 - 修改 Prompt
+- 操作 Storage
+
+---
+
+### Validate Node
+
+职责：
+
+- 用 OutputSchema 校验 Parse Node 产出的 Content 结构
+- 校验项：required 字段存在、字段类型匹配、minItems/maxItems 数量合规
+- 通过 → 流入 DTO Node
+- 不通过 → 将失败原因注入 FinalPrompt → 重新执行 Provider Node（重试，最多 3 次）
+- 3 次全败 → 中断 Workflow，返回 VALIDATE_ERROR
+
+校验失败反馈格式：
+
+```
+上次生成的内容校验不通过：
+- 缺少 titles 字段
+- pages 数量不足（需要至少 5 页，实际只有创建 2 页）
+- tags 字段类型错误（应该是数组，实际是字符串）
+
+请修正后重新生成。
+```
+
+禁止：
+
+- 调用 AI
+- 修改 DTO 内容
 - 操作 Storage
 
 ---
@@ -283,9 +323,10 @@ Workflow 的完整生命周期必须严格按照以下阶段执行：
 4. AI 调用
 5. 原始结果接收
 6. 数据解析
-7. DTO 构建
-8. 元数据注入
-9. 输出分发
+7. 结构校验（新增：Validate Node）
+8. DTO 构建
+9. 元数据注入
+10. 输出分发
 ```
 
 每一个阶段必须具备**明确输入与输出契约**。
@@ -332,6 +373,7 @@ interface WorkflowError {
 | PROMPT_ERROR | Prompt 构建失败 |
 | PROVIDER_ERROR | AI 调用失败 |
 | PARSE_ERROR | JSON 解析失败 |
+| VALIDATE_ERROR | 输出结构校验失败（不符合 OutputSchema） |
 | DTO_ERROR | 数据结构错误 |
 | UNKNOWN_ERROR | 未知错误 |
 
@@ -341,26 +383,42 @@ interface WorkflowError {
 
 Workflow 允许对 Provider Node 进行有限重试。
 
-### 规则如下：
+### 两类重试：
+
+**A. 网络/模型错误（原有）**
 
 - 仅 Provider Node 可重试
 - 最大重试次数：3 次
-- 仅网络或模型错误允许重试
-- Parse 错误禁止重试
+- 每次重试间隔递增（1s / 2s / 3s）
 
----
+**B. 结构校验失败（新增）**
+
+- Validate Node 发现输出不符合 OutputSchema 时触发
+- 最大重试次数：3 次
+- 每次重试将失败的具体原因注入 FinalPrompt 的 userPrompt
+- 让 AI 知晓哪里不对，针对性修正
 
 ### 重试流程：
 
 ```text
-Provider Error
-     ↓
-Retry Attempt (max 3)
-     ↓
-Success → Continue Workflow
-     ↓
-Fail → Abort Workflow
+Provider → Parse → Validate
+               │
+          ┌────┴────┐
+          ▼         ▼
+       通过       不通过
+          │         │
+          ▼         ▼
+       继续       注入失败原因 → 重试 Provider（最多 3 次）
+                               │
+                          ┌────┴────┐
+                          ▼         ▼
+                       成功       3 次全败
+                          │         │
+                          ▼         ▼
+                       继续    返回 VALIDATE_ERROR
 ```
+
+禁止 Parse 错误触发重试（那是语法错误，不是内容问题）。
 
 ---
 
@@ -375,6 +433,8 @@ Workflow 必须具备完整执行日志。
 - AI Model
 - 输入参数
 - 每个 Node 执行时间
+- 校验失败详情（如有）
+- 重试次数
 - 错误信息（如有）
 - 最终 DTO hash
 
