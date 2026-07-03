@@ -38,7 +38,7 @@ AI 模型决策受 `.rules/provider.mdc` 约束，这里列出简洁摘要：
 | 认证 | JWT + bcryptjs |
 | 缓存 | Redis（可选，API Key 热缓存） |
 
-- 七张核心表：`users` / `contents` / `prompt_templates` / `prompt_versions` / `generation_records` / `user_settings` / `publish_records`
+- 八张核心表：`users` / `contents` / `prompt_templates` / `prompt_versions` / `generation_records` / `user_settings` / `publish_records` / `app_logs`
 - 前端 `LocalStorageRepository` 保留作为离线缓存，新增 `HttpRepository` 走后端 API
 
 ---

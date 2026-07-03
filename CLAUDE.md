@@ -114,7 +114,7 @@ rules/provider.mdc
 - 扩展现有 Provider 的规则
 
 文本生成默认使用 Gemini 2.0 Flash（主）→ DeepSeek V4 Flash（兜底）。
-图片生成默认使用硅基流动 FLUX.1 schnell（主）→ 阿里云通义万相（兜底）。
+图片生成默认使用通义万相 2.0。
 
 ---
 
@@ -128,7 +128,7 @@ rules/backend.mdc
 
 - Express 后端架构与分层约束
 - MySQL 兼容数据库 — 不绑定平台，支持本地 MySQL / TiDB / MariaDB / PlanetScale / RDS
-- 七张核心表（users / contents / prompt_templates / prompt_versions / generation_records / user_settings / publish_records）
+- 八张核心表（users / contents / prompt_templates / prompt_versions / generation_records / user_settings / publish_records / app_logs）
 - RESTful API 路由设计（含认证 / 管理接口）
 - JWT 认证系统（登录 / 注册 / Token 刷新 / 路由守卫）
 - AdminJS 数据库管理面板（仅 admin 可访问）
@@ -137,7 +137,7 @@ rules/backend.mdc
 - 离线降级策略（数据库不可用时自动切换 localStorage）
 - 后端禁止含业务逻辑（路由只做校验 → repository 只做 CRUD）
 
-后端使用 Express + AdminJS + Redis（可选），七张 MySQL 兼容表，前端 localStorage 离线降级。
+后端使用 Express + AdminJS + Redis（可选），八张 MySQL 兼容表，前端 localStorage 离线降级。
 
 ---
 
