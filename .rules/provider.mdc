@@ -183,7 +183,7 @@ VITE_TONGYI_API_KEY=        # 阿里云 DashScope（通义万相）
 
 ---
 
-## 六、Provider 目录结构
+## 七、Provider 目录结构
 
 ```
 src/providers/
@@ -198,7 +198,140 @@ src/providers/
 
 ---
 
-## 七、扩展规则
+## 八、SDK 依赖与初始化（2026-07-03 更新）
+
+### 8.1 依赖清单
+
+三个用 `openai`，一个用 `@google/genai`：
+
+```json
+{
+  "openai": "^6.45",
+  "@google/genai": "^2.10"
+}
+```
+
+注意：`@google/generative-ai` 已废弃，必须用 `@google/genai`。
+
+### 8.2 Gemini Provider（文字-主）
+
+```ts
+// src/providers/gemini-provider.ts
+import { GoogleGenAI } from '@google/genai';
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+class GeminiProvider implements AIProvider {
+  readonly name = 'Gemini';
+  readonly model = 'gemini-2.0-flash';
+
+  async generate(prompt: FinalPrompt): Promise<string> {
+    const response = await ai.models.generateContent({
+      model: this.model,
+      contents: `${prompt.systemPrompt}\n\n${prompt.userPrompt}`,
+      config: { responseMimeType: 'application/json' },
+    });
+    return response.text ?? '';
+  }
+}
+```
+
+### 8.3 DeepSeek Provider（文字-兜底）
+
+```ts
+// src/providers/deepseek-provider.ts
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+  baseURL: 'https://api.deepseek.com',
+  apiKey: process.env.DEEPSEEK_API_KEY,
+});
+
+class DeepSeekProvider implements AIProvider {
+  readonly name = 'DeepSeek';
+  readonly model = 'deepseek-v4-flash';  // deepseek-chat 将于 2026-07-24 废弃
+
+  async generate(prompt: FinalPrompt): Promise<string> {
+    const completion = await client.chat.completions.create({
+      model: this.model,
+      messages: [
+        { role: 'system', content: prompt.systemPrompt },
+        { role: 'user', content: prompt.userPrompt },
+      ],
+      response_format: { type: 'json_object' },
+    });
+    return completion.choices[0].message.content ?? '';
+  }
+}
+```
+
+### 8.4 硅基流动 FLUX Provider（图片-主）
+
+```ts
+// src/providers/flux-provider.ts
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+  baseURL: 'https://api.siliconflow.cn/v1',
+  apiKey: process.env.SILICONFLOW_API_KEY,
+});
+
+class FluxProvider implements ImageProvider {
+  readonly name = 'SiliconFlow-FLUX';
+  readonly model = 'black-forest-labs/FLUX.1-schnell';
+
+  async generate(prompt: string): Promise<ImageResult> {
+    const result = await client.images.generate({
+      model: this.model,
+      prompt,
+      n: 1,
+      size: '1024x1024',  // 默认尺寸，可由用户选择覆盖
+    });
+    return { url: result.data[0].url ?? '' };
+  }
+}
+```
+
+### 8.5 通义万相 Provider（图片-兜底）
+
+```ts
+// src/providers/tongyi-provider.ts
+import OpenAI from 'openai';
+
+const client = new OpenAI({
+  baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  apiKey: process.env.TONGYI_API_KEY,
+});
+
+class TongyiProvider implements ImageProvider {
+  readonly name = 'Tongyi-Wanxiang';
+  readonly model = 'wanxiang-v2';
+
+  async generate(prompt: string): Promise<ImageResult> {
+    const result = await client.images.generate({
+      model: this.model,
+      prompt,
+      n: 1,
+    });
+    return { url: result.data[0].url ?? '' };
+  }
+}
+```
+
+### 8.6 baseURL 汇总
+
+| Provider | 包 | baseURL |
+|---|---|---|
+| Gemini | `@google/genai` | —（SDK 内建） |
+| DeepSeek | `openai` | `https://api.deepseek.com` |
+| 硅基流动 | `openai` | `https://api.siliconflow.cn/v1` |
+| 通义万相 | `openai` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+
+三个 Provider 共用同一个 `openai` npm 包，仅 baseURL 和 apiKey 不同。
+
+---
+
+## 九、扩展规则
 
 ### 7.1 新增文字模型
 
@@ -218,7 +351,7 @@ src/providers/
 
 ---
 
-## 八、决策记录
+## 十、决策记录
 
 | 日期 | 决策 | 原因 |
 |------|------|------|
