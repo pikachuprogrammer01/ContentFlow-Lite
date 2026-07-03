@@ -141,6 +141,23 @@ rules/backend.mdc
 
 ---
 
+## 8. 日志模块类任务
+
+读取：
+
+rules/logging.mdc
+
+关注内容：
+
+- 日志级别规范（TRACE/DEBUG/INFO/WARN/ERROR）— 对标 Spring Boot
+- 后端 winston 封装（createLogger + DB Transport + Console Transport）
+- 前端 loglevel 封装（ERROR 发后端，其他输出控制台）
+- 禁止直接 console.log — 必须通过 Logger 模块
+- app_logs 表结构与写入规则
+- 环境变量控制（LOG_LEVEL / LOG_TO_DB / VITE_LOG_LEVEL）
+
+---
+
 # 四、系统执行链路（抽象级）
 
 ```text

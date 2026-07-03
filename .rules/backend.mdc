@@ -203,6 +203,27 @@ CREATE TABLE publish_records (
 
 说明：各内容平台大多无开放发布 API，本系统不直接对接。用户手动发布后回到编辑页标记"已发布"，系统记录发布轨迹。
 
+### 3.8 app_logs — 应用日志表
+
+```sql
+CREATE TABLE app_logs (
+  id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  level       VARCHAR(10)  NOT NULL COMMENT 'TRACE/DEBUG/INFO/WARN/ERROR',
+  message     TEXT         NOT NULL,
+  module      VARCHAR(100) COMMENT '来源模块，如 workflow/gemini-provider',
+  user_id     VARCHAR(64)  COMMENT '相关用户',
+  trace_id    VARCHAR(64)  COMMENT 'Workflow ID 或请求 trace id',
+  detail      JSON         COMMENT '额外上下文（错误栈/参数等）',
+  created_at  DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  INDEX idx_level (level),
+  INDEX idx_module (module),
+  INDEX idx_trace_id (trace_id),
+  INDEX idx_created_at (created_at)
+) COMMENT='应用日志表';
+```
+
+日志规范见 `.rules/logging.mdc`。
+
 ---
 
 ## 四、表设计原则
@@ -241,6 +262,7 @@ CREATE TABLE publish_records (
 | `prompt_versions` | 不允许单条删除。删父模板时级联删除整棵版本树 |
 | `generation_records` | 不允许删除（审计日志，只追加不修改） |
 | `publish_records` | 不允许删除（发布历史追溯） |
+| `app_logs` | 不允许编辑和删除（只读审计日志） |
 | `users` | 不允许删除自己 |
 
 ### AdminJS 配置示例
@@ -525,6 +547,9 @@ GET    /api/prompt/versions/:promptId  # 版本列表
 # AI 生成（需认证）
 POST   /api/generate           # 触发 AI 生成
 
+# 日志
+POST   /api/log                # 前端上报日志（ERROR 级别），写入 app_logs 表
+
 # 系统管理（需认证，仅 admin）
 GET    /api/admin/config/database      # 获取当前 DB 配置（密码脱敏）
 POST   /api/admin/config/database      # 更新 DB 配置 + 重连
@@ -550,6 +575,26 @@ db/client.ts    → 连接池管理
 
 路由层不得直接写 SQL，必须通过 repository。
 repository 不得包含业务逻辑。
+
+### 9.2-A API 封装原则
+
+**不允许在业务代码中直接调用原生 API 或第三方 SDK。** 必须封装一层适配器。
+
+典型场景：
+
+| ❌ 禁止 | ✅ 正确 |
+|---|---|
+| routes 中 `import OpenAI from 'openai'` 直接调 | 通过 `providers/` 封装调用 |
+| routes 中 `import bcrypt from 'bcryptjs'` 直接哈希 | 通过 `utils/crypto.ts` 封装 |
+| routes 中 `import Redis from 'ioredis'` 直接读写 | 通过 `db/api-key-store.ts` 封装 |
+| 任意位置直接 `console.log()` | 通过 Logger 模块输出 |
+
+原因：
+- 第三方库升级/替换时，只改封装层，不影响业务代码
+- 统一错误处理（如 OpenAI 错误 → 转为 WorkflowError）
+- 集中管理配置（baseURL、timeout、retry）
+
+封装层命名约定：`server/utils/` 或 `server/db/` 下的模块，对外暴露语义化函数签名，隐藏底层实现。
 
 ### 9.3 错误处理
 
@@ -627,4 +672,4 @@ export function createRepository<T extends { id: string }>(collectionName: strin
 | 2026-07-03 | 双层配置（.env + config.json） | 数据库配置不在代码中写死 |
 | 2026-07-03 | 不选 Next.js | 前端已是 Vue |
 | 2026-07-03 | 新增 publish_records 表 | 不做平台 API 对接，记录用户手动发布轨迹 |
-| 2026-07-03 | AdminJS 字段保护 | prompt_versions/generation_records/about等只读，防误操作 |
+| 2026-07-03 | 新增 app_logs 表 + Logger 模块 | winston(后端) + loglevel(前端)，对标 Spring Boot 日志级别 |

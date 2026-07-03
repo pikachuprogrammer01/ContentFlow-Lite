@@ -1,0 +1,226 @@
+---
+description: ContentFlow Lite 日志模块规范（对标 Spring Boot Logger）
+alwaysApply: true
+---
+
+# Logging Rules — 日志模块规范
+
+## 一、核心原则
+
+整个系统必须通过统一的 Logger 模块输出日志，**禁止在任何位置直接使用 `console.log()` / `console.error()`**。
+
+日志模块对标 Spring Boot Logger 设计：
+- 每模块获取自己的命名 Logger
+- 五级日志（TRACE / DEBUG / INFO / WARN / ERROR）
+- 环境变量统一控制级别
+- 后端持久化到数据库
+
+---
+
+## 二、日志级别
+
+| 级别 | 用途 | 生产输出 | 示例 |
+|------|------|----------|------|
+| **ERROR** | 需要人工介入 | ✅ 控制台 + DB | AI 全失败、DB 断开 |
+| **WARN** | 异常但可降级 | ✅ 控制台 + DB | Provider 切换兜底、重试 |
+| **INFO** | 关键业务节点 | ✅ 控制台 + DB | 生成成功、用户注册 |
+| **DEBUG** | 开发调试信息 | ❌ 不输出 | 请求 payload、token 数 |
+| **TRACE** | 逐行追踪 | ❌ 不输出 | 每 Node 入参出参 |
+
+默认级别：`LOG_LEVEL=info`（生产）或 `LOG_LEVEL=debug`（开发）。
+
+---
+
+## 三、后端日志
+
+### 3.1 技术选型
+
+| 库 | 用途 |
+|---|---|
+| **winston** | 日志核心（Transport 机制，支持多输出） |
+| **winston-mysql**（备选） | MySQL Transport。如果不稳定则自写 Custom Transport |
+
+### 3.2 Logger 封装
+
+```ts
+// server/utils/logger.ts
+import winston from 'winston';
+
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json(),
+  ),
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple(),
+      ),
+    }),
+    // DB Transport（生产环境）
+    // new MySQLTransport({ table: 'app_logs', connection: dbPool }),
+  ],
+});
+
+export function createLogger(module: string) {
+  return {
+    error: (msg: string, detail?: Record<string, unknown>) =>
+      logger.error({ module, message: msg, ...detail }),
+    warn: (msg: string, detail?: Record<string, unknown>) =>
+      logger.warn({ module, message: msg, ...detail }),
+    info: (msg: string, detail?: Record<string, unknown>) =>
+      logger.info({ module, message: msg, ...detail }),
+    debug: (msg: string, detail?: Record<string, unknown>) =>
+      logger.debug({ module, message: msg, ...detail }),
+    trace: (msg: string, detail?: Record<string, unknown>) =>
+      logger.silly({ module, message: msg, ...detail }),
+  };
+}
+```
+
+### 3.3 使用规范
+
+```ts
+const log = createLogger('gemini-provider');
+
+log.info('AI 调用成功', { model: 'gemini-2.0-flash', tokens: 1500, traceId });
+log.warn('Provider 切换兜底', { from: 'gemini', to: 'deepseek', reason: 'timeout' });
+log.error('所有 Provider 均失败', { errors: [e1, e2], traceId });
+log.debug('请求参数', { prompt: systemPrompt.substring(0, 200) });
+```
+
+### 3.4 数据库存什么
+
+| 字段 | 来源 |
+|---|---|
+| `level` | `ERROR` / `WARN` / `INFO` |
+| `message` | 日志消息 |
+| `module` | `createLogger('moduleName')` 指定的名字 |
+| `user_id` | `req.user?.userId` |
+| `trace_id` | Workflow ID 或请求 trace id |
+| `detail` | JSON 附加字段（错误栈、参数等） |
+| `created_at` | 毫秒级时间戳 |
+
+生产环境 INFO 及以上写入 DB，DEBUG/TRACE 仅控制台。
+
+### 3.5 环境变量
+
+```
+LOG_LEVEL=info          # TRACE|DEBUG|INFO|WARN|ERROR
+LOG_TO_DB=true          # 是否写数据库（默认 true）
+```
+
+---
+
+## 四、前端日志
+
+### 4.1 技术选型
+
+| 库 | 用途 |
+|---|---|
+| **loglevel** | 轻量（<1KB），API 对标 console，支持动态切换级别 |
+
+### 4.2 Logger 封装
+
+```ts
+// src/utils/logger.ts
+import log from 'loglevel';
+
+log.setLevel(
+  (import.meta.env.VITE_LOG_LEVEL as string) ?? 'warn'
+);
+
+export function createLogger(module: string) {
+  const prefix = `[${module}]`;
+
+  const sendError = async (msg: string, detail?: unknown) => {
+    if (import.meta.env.PROD) {
+      try {
+        await fetch('/api/log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ level: 'ERROR', module, message: msg, detail }),
+        });
+      } catch { /* 日志发送失败不能影响业务 */ }
+    }
+  };
+
+  return {
+    error: (msg: string, detail?: unknown) => {
+      log.error(prefix, msg, detail);
+      sendError(msg, detail);  // ERROR 必发后端
+    },
+    warn:  (msg: string, detail?: unknown) => log.warn(prefix, msg, detail),
+    info:  (msg: string, detail?: unknown) => log.info(prefix, msg, detail),
+    debug: (msg: string, detail?: unknown) => log.debug(prefix, msg, detail),
+    trace: (msg: string, detail?: unknown) => log.debug(prefix, msg, detail),
+  };
+}
+```
+
+### 4.3 使用规范
+
+```ts
+const log = createLogger('HomePage');
+
+log.info('用户开始生成', { topic, platform });
+log.warn('生成耗时较长', { duration: 15000, traceId });
+log.error('AI 调用失败', { code: 'PROVIDER_ERROR', traceId });
+log.debug('store state', { contentId: store.currentContent.id });
+```
+
+### 4.4 传输规则
+
+| 环境 | ERROR | WARN | INFO | DEBUG/TRACE |
+|---|---|---|---|---|
+| 开发 | 控制台 | 控制台 | 控制台 | 控制台 |
+| 生产 | 控制台 + **后端** | 控制台 | 控制台 | 不输出 |
+
+只发 ERROR 到后端，避免网络洪泛。
+
+---
+
+## 五、统一控制入口
+
+| 环境变量 | 作用 |
+|---|---|
+| `LOG_LEVEL`（后端） | 全局控制后端输出级别 |
+| `VITE_LOG_LEVEL`（前端） | 全局控制前端控制台输出级别 |
+| `LOG_TO_DB`（后端） | 是否写 app_logs 表 |
+
+开发环境：
+```
+LOG_LEVEL=debug
+VITE_LOG_LEVEL=debug
+LOG_TO_DB=false
+```
+
+生产环境：
+```
+LOG_LEVEL=info
+VITE_LOG_LEVEL=warn
+LOG_TO_DB=true
+```
+
+---
+
+## 六、禁止事项
+
+- ❌ 禁止任何模块直接使用 `console.log()` / `console.error()`
+- ❌ 禁止在 Logger 层写业务逻辑
+- ❌ 禁止 DEBUG/TRACE 级别日志写入数据库（仅控制台）
+- ❌ 禁止日志发送失败阻塞业务流程（catch 忽略）
+- ❌ 禁止在日志 message 中硬编码用户密码、API Key 明文
+
+---
+
+## 七、依赖清单
+
+```json
+{
+  "winston": "^3.x",
+  "loglevel": "^1.x"
+}
+```
