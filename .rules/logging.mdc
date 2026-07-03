@@ -91,6 +91,41 @@ log.error('所有 Provider 均失败', { errors: [e1, e2], traceId });
 log.debug('请求参数', { prompt: systemPrompt.substring(0, 200) });
 ```
 
+### 3.4 Custom MySQL Transport
+
+DB Transport 采用自写方案（不依赖 `winston-mysql`，该包已无人维护）。
+
+```ts
+// server/utils/mysql-transport.ts
+import Transport from 'winston-transport';
+import type { Pool } from 'mysql2/promise';
+
+export function createMySQLTransport(pool: Pool): Transport {
+  return new Transport({
+    async log(info, callback) {
+      try {
+        await pool.query(
+          `INSERT INTO app_logs (level, module, message, detail, created_at)
+           VALUES (?, ?, ?, ?, NOW())`,
+          [info.level, info.module, info.message, JSON.stringify(info.detail || {})]
+        );
+      } catch (err) {
+        // DB 写入失败不阻塞应用，fallback 到 console
+        console.error('[MySQLTransport] write failed:', err);
+      }
+      callback();
+    },
+  });
+}
+```
+
+| 决策 | 方案 | 原因 |
+|------|------|------|
+| DB Transport | **自写 Custom Transport**，基于 mysql2 pool | winston-mysql 无人维护，自写更可控、更稳定 |
+| DB 写入失败 | 不阻塞应用，fallback 到 console.error | 日志不应该成为故障点 |
+
+---
+
 ### 3.4 数据库存什么
 
 | 字段 | 来源 |

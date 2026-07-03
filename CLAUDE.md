@@ -59,13 +59,15 @@ rules/prompt.mdc
 读取：
 
 rules/architecture.mdc（Content DTO 部分）
+**docs/types.md（核心类型定义 — FinalPrompt / OutputSchema / Provider 接口等）**
 
 关注内容：
 
 - Content 结构定义
 - Metadata 规范
-- Page / Title / Cover 结构
+- Page / Title / Cover 结构（含 imagePrompt / imageUrl / imageStatus）
 - DTO 唯一性原则
+- FinalPrompt / OutputSchema / AIProvider / ImageProvider / WorkflowNodeType 等所有核心类型
 
 ---
 
@@ -113,7 +115,7 @@ rules/provider.mdc
 - 模型切换与兜底策略
 - 扩展现有 Provider 的规则
 
-文本生成默认使用 Gemini 2.0 Flash（主）→ DeepSeek V4 Flash（兜底）。
+文本生成默认使用 Gemini 2.0 Flash（主）→ DeepSeek V4 Flash（兜底）→ 硅基流动 Qwen2.5-72B（备选）。
 图片生成默认使用通义万相 2.0。
 
 ---

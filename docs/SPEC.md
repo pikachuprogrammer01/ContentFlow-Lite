@@ -125,7 +125,7 @@ Workflow Engine 是整个系统唯一的业务入口。
         ┌─────────────────┼─────────────────┐
         ▼                 ▼                 ▼
  Prompt Builder      AI Provider       Storage
-        │                 │            (MySQL 兼容 DB + localStorage)
+        │                 │            (MySQL 兼容数据库)
         └─────────┬───────┘
                   ▼
              AI 原始返回内容
@@ -263,7 +263,7 @@ Workflow 不负责：
 
 包括：
 
-- Storage（MySQL 兼容数据库 + localStorage 双模）
+- Storage（MySQL 兼容数据库）
 - Exporter
 - AdminJS Panel（数据库管理）
 - Logger
@@ -1067,6 +1067,8 @@ interface Content {
 
   summary: string;
 
+  extraRequirements?: string;  // 用户输入的补充要求，重试时复用
+
   metadata: Metadata;
 }
 ```
@@ -1105,11 +1107,7 @@ interface Cover {
 
 当前用于封面文案。
 
-未来可直接用于：
-
-- AI 图片生成。
-- 封面设计。
-- 社交媒体分享图。
+可扩展用于封面设计与社交媒体分享图。
 
 ***
 
@@ -1120,6 +1118,9 @@ interface Page {
   id: string;
   title: string;
   content: string;
+  imagePrompt?: string;      // 该页对应的图片生成 Prompt（用户可选填）
+  imageUrl?: string;         // 生成后的图片地址
+  imageStatus?: 'idle' | 'generating' | 'done' | 'failed';  // 图片状态
 }
 ```
 
@@ -1150,6 +1151,8 @@ interface Metadata {
   generator: string;
 }
 ```
+
+注意：不再记录 Temperature。内容生成场景不需要记录模型温度参数。
 
 Metadata 不属于正文内容。
 
@@ -1217,59 +1220,24 @@ Workflow
      ▼
 Repository Interface
      │
- ┌───┴─────────────┐
- ▼                 ▼
-LocalStorage   IndexedDB
-                    │
-                    ▼
-              Cloud Storage
+     ▼
+HttpRepository (前端)
+     │
+     ▼
+Express API
+     │
+     ▼
+Repository (后端)
+     │
+     ▼
+MySQL 兼容数据库
 ```
 
 ***
 
 ## 10.1 Repository Interface
 
-建议统一接口如下：
-
-```ts
-interface ContentRepository {
-
-  saveContent(content: Content): Promise<void>;
-
-  getContent(id: string): Promise<Content | null>;
-
-  deleteContent(id: string): Promise<void>;
-
-  listContents(): Promise<Content[]>;
-
-}
-```
-
-Prompt Repository：
-
-```ts
-interface PromptRepository {
-
-  savePrompt();
-
-  getPrompt();
-
-  getVersion();
-
-}
-```
-
-Generation Repository：
-
-```ts
-interface GenerationRepository {
-
-  saveGeneration();
-
-  getGeneration();
-
-}
-```
+Repository 接口定义见 `docs/types.md`，前端统一通过 `HttpRepository` 调用后端 API。
 
 Workflow 只调用 Repository Interface。
 
@@ -1279,17 +1247,22 @@ Workflow 只调用 Repository Interface。
 
 ## 10.2 存储策略
 
-MVP 阶段采用 LocalStorage。
+数据持久化全部通过后端 Express API，使用 MySQL 兼容数据库。
 
-存储内容包括：
+存储内容包括（详见 backend.mdc）：
 
-- Prompt
-- Prompt Version
-- Generation Record
-- Content DTO
-- 用户配置
+- users（用户）
+- contents（Content DTO）
+- prompt_templates（Prompt 模板，含类型 text/image）
+- prompt_versions（Prompt 版本快照，含 outputSchema）
+- generation_records（生成记录）
+- user_settings（用户配置 + API Key 加密存储）
+- publish_records（发布记录）
+- app_logs（应用日志）
 
-后续升级至 IndexedDB 或云端时，不需要修改 Workflow 与业务逻辑，仅替换 Repository 实现即可。
+前端通过 HttpRepository 调后端 API。无离线模式，数据库不可用时 App 不可用。
+
+数据库不绑定平台：支持本地 MySQL / TiDB / MariaDB / PlanetScale / RDS 等任何 MySQL 兼容数据库。
 
 ***
 
@@ -1298,6 +1271,12 @@ MVP 阶段采用 LocalStorage。
 Storage 仅负责数据持久化。
 
 允许：
+- Repository 封装 CRUD
+- 统一接口，不绑定具体存储实现
+
+禁止：
+- 在业务逻辑中直接操作数据库
+- 在 Workflow 中绕过 Repository
 
 - 保存。
 - 查询。
@@ -1950,22 +1929,25 @@ Prompt Builder 负责将运行时变量替换为实际内容，并自动记录 P
 用户输入主题
       │
       ▼
-Workflow Engine
+Input Node
       │
       ▼
-Prompt Builder
+Prompt Node
       │
       ▼
-AI Provider
+Provider Node
       │
       ▼
-Raw Response
+Parse Node
       │
       ▼
-Parser
+Validate Node（OutputSchema 校验）
       │
       ▼
-Content DTO
+DTO Node
+      │
+      ▼
+Output Node
       │
       ├──────────────┐
       ▼              ▼
@@ -1977,8 +1959,9 @@ Content DTO
 
 整个流程中：
 
-- Workflow 负责业务调度。
+- Workflow 负责业务调度（七个 Node 串联）。
 - Parser 负责数据转换。
+- Validate Node 负责结构校验与重试。
 - DTO 负责数据流转。
 - Exporter 负责导出。
 - Repository 负责持久化。
@@ -2005,7 +1988,7 @@ Content DTO
 
 **为什么采用 Repository 模式？**
 
-隔离业务逻辑与存储实现，方便未来从 LocalStorage 平滑迁移至 IndexedDB 或云端存储。
+隔离业务逻辑与存储实现，前端通过 HttpRepository 调后端 API，后端 Repository 封装数据库操作。方便未来替换数据库实现而不影响业务代码。
 
 **为什么采用插件式 Exporter？**
 

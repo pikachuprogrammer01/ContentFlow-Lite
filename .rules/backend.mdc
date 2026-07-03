@@ -12,7 +12,7 @@ alwaysApply: true
 | API 框架 | **Express** | 生态最大，AdminJS/认证/安全中间件开箱即用 |
 | 数据库 | **MySQL 兼容数据库** | 不绑定平台：本地 MySQL / TiDB / MariaDB / PlanetScale / RDS 等任意 MySQL 兼容库 |
 | 数据库驱动 | **mysql2** | Node.js MySQL 客户端 |
-| ORM | **TypeORM**（可选） | 与 AdminJS 集成用，repository 层可直接写 SQL |
+| ORM | **TypeORM**（必须） | AdminJS 依赖 TypeORM 接入，repository 层可直接写 SQL |
 | 数据库管理 | **AdminJS** + `@adminjs/express` + `@adminjs/typeorm` | 自动生成 CRUD 界面 |
 | 认证 | **JWT**（`jsonwebtoken`） | access token 15min + refresh token 7d |
 | 密码哈希 | **bcryptjs** | cost=12 |
@@ -412,6 +412,7 @@ REDIS_URL=          # Redis 连接（可选，不配则跳过 Redis）
 ENCRYPTION_KEY=     # AES-256 加密密钥（64 位 hex 字符串，生产环境必须换）
 ADMIN_EMAIL=        # AdminJS 管理后台登录邮箱
 ADMIN_PASSWORD_HASH= # AdminJS 管理后台密码 bcrypt 哈希
+IMAGE_TIMEOUT=15    # 图片生成超时秒数（默认 15s，可配置）
 ```
 
 ### 7.3 数据库配置热切换
