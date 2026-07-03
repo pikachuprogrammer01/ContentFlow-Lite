@@ -16,6 +16,7 @@ alwaysApply: true
 | 数据库管理 | **AdminJS** + `@adminjs/express` + `@adminjs/typeorm` | 自动生成 CRUD 界面 |
 | 认证 | **JWT**（`jsonwebtoken`） | access token 15min + refresh token 7d |
 | 密码哈希 | **bcryptjs** | cost=12 |
+| 数据加密 | **AES-256-GCM**（Node.js crypto） | API Key / DB 密码等敏感字段落库前加密，读取时解密 |
 | 安全头 | **helmet** | HTTP 安全头 |
 | 限流 | **express-rate-limit** | 登录接口 5 次/分钟/IP |
 | 缓存 | **Redis**（可选） | API Key 热缓存，不配则直接查 DB |
@@ -374,7 +375,7 @@ router.beforeEach((to, from, next) => {
 | CORS | 仅允许前端域名 | `cors({ origin: frontendUrl })` |
 | 登录爆破 | Rate Limit | `express-rate-limit` 登录路由 5 次/分钟/IP |
 | Token 泄露 | 短 access token (15min) + refresh 轮换 | JWT `expiresIn: '15m'` |
-| API Key 泄露 | API 返回脱敏，前端只显示 `sk-****...****` | `api-key-store.ts` 脱敏函数 |
+| API Key 泄露 | 加密存储 + 前端不回显 + API 不返回实际值 | AES-256-GCM 加密 + isSet 布尔响应 |
 | 请求体过大 | 限制大小 | `express.json({ limit: '10mb' })` |
 | 安全头 | `helmet()` | Express 中间件 |
 
@@ -408,6 +409,9 @@ DB_DATABASE=      # 数据库名
 JWT_SECRET=         # JWT 签名密钥（生产环境必须换强随机值）
 JWT_REFRESH_SECRET= # Refresh Token 签名密钥
 REDIS_URL=          # Redis 连接（可选，不配则跳过 Redis）
+ENCRYPTION_KEY=     # AES-256 加密密钥（64 位 hex 字符串，生产环境必须换）
+ADMIN_EMAIL=        # AdminJS 管理后台登录邮箱
+ADMIN_PASSWORD_HASH= # AdminJS 管理后台密码 bcrypt 哈希
 ```
 
 ### 7.3 数据库配置热切换
@@ -417,9 +421,19 @@ REDIS_URL=          # Redis 连接（可选，不配则跳过 Redis）
 3. 成功 → 写 `config.json` → 切换连接池 → 返回成功
 4. 失败 → 不写文件，返回错误信息，连接池保持原样
 
-### 7.4 API Key 存取（Redis + DB 两层缓存）
+### 7.4 API Key 存取（加密存储 + 不回显）
 
-不再使用闭包内存缓存，避免多实例数据不一致。Redis 为主缓存，DB 为持久化存储。
+**前端展示原则：**
+
+- 密码、API Key 等敏感数据**仅保存时展示一次**（类比 GitHub Token 创建后只显示一次）
+- 后续请求 API 时**不回显**实际值，只返回 `isSet: true/false`
+- 提供「修改」按钮，用户输入新值覆盖旧值，不展示旧值
+
+**后端加密存储：**
+
+所有敏感字段（API Key / DB 密码）落库前用 AES-256-GCM 加密，读取时解密。加密密钥来自环境变量 `ENCRYPTION_KEY`。
+
+redis 热缓存中存储解密后的明文（TTL 1h），DB 中存密文。
 
 ```ts
 // server/db/api-key-store.ts
@@ -431,39 +445,65 @@ const redis = process.env.REDIS_URL ? new Redis(process.env.REDIS_URL) : null;
 export async function getApiKey(userId: string, platform: string): Promise<string | null> {
   const cacheKey = `apikey:${userId}:${platform}`;
 
-  // 1. Redis（如果配置了）
+  // 1. Redis（如果配置了）— Redis 中存明文
   if (redis) {
     const cached = await redis.get(cacheKey);
     if (cached) return cached;
   }
 
-  // 2. DB
+  // 2. DB — DB 中存密文
   const [row] = await db.query(
     'SELECT `value` FROM user_settings WHERE user_id = ? AND `key` = ?',
     [userId, `${platform}_api_key`]
   );
   if (!row) return null;
 
-  // 3. 回写 Redis（TTL 1h）
+  // 3. 解密 → 写 Redis（明文 TTL 1h）
+  const decrypted = decrypt(row.value);
   if (redis) {
-    await redis.set(cacheKey, row.value, 'EX', 3600);
+    await redis.set(cacheKey, decrypted, 'EX', 3600);
   }
-  return row.value;
+  return decrypted;
 }
 
 export async function setApiKey(userId: string, platform: string, key: string): Promise<void> {
-  // 写 DB
+  const encrypted = encrypt(key);
+  // 写 DB（密文）
   await db.query(
     'INSERT INTO user_settings (user_id, `key`, `value`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `value` = ?',
-    [userId, `${platform}_api_key`, key, key]
+    [userId, `${platform}_api_key`, encrypted, encrypted]
   );
 
-  // 刷新 Redis
+  // 刷新 Redis（明文 TTL 1h）
   if (redis) {
     const cacheKey = `apikey:${userId}:${platform}`;
     await redis.set(cacheKey, key, 'EX', 3600);
   }
 }
+
+// 加密/解密工具
+import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+
+const ALGORITHM = 'aes-256-gcm';
+function encrypt(plaintext: string): string {
+  const key = Buffer.from(process.env.ENCRYPTION_KEY!, 'hex'); // 64 hex chars = 32 bytes
+  const iv = randomBytes(16);
+  const cipher = createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  // 返回 iv + tag + ciphertext 的 hex 拼接
+  return iv.toString('hex') + ':' + tag.toString('hex') + ':' + encrypted.toString('hex');
+}
+
+function decrypt(ciphertext: string): string {
+  const key = Buffer.from(process.env.ENCRYPTION_KEY!, 'hex');
+  const [ivHex, tagHex, encHex] = ciphertext.split(':');
+  const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(ivHex, 'hex'));
+  decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+  const decrypted = Buffer.concat([decipher.update(Buffer.from(encHex, 'hex')), decipher.final()]);
+  return decrypted.toString('utf8');
+}
+```
 ```
 
 ---
@@ -471,6 +511,18 @@ export async function setApiKey(userId: string, platform: string, key: string): 
 ## 八、AdminJS 数据库管理
 
 ### 8.1 接入方式
+
+AdminJS 使用**独立的管理后台账号密码**，不与用户系统（users 表）共用。
+
+管理后台凭据通过环境变量配置：
+
+```
+ADMIN_EMAIL=admin@contentflow.com
+ADMIN_PASSWORD_HASH=<bcrypt 哈希>
+ADMIN_COOKIE_SECRET=<随机字符串>
+```
+
+登录 AdminJS 面板需要输入 `ADMIN_EMAIL` + `ADMIN_PASSWORD`，与应用系统（users 表）账号完全隔离。
 
 AdminJS 通过 `@adminjs/express` 插件接入 Express，挂在 `/admin` 路径。
 
@@ -491,11 +543,10 @@ const admin = new AdminJS({
 // 仅 admin 角色可访问
 const adminRouter = AdminJSExpress.buildAuthenticatedRouter(admin, {
   authenticate: async (email, password) => {
-    const user = await userRepo.findByEmail(email);
-    if (user && user.role === 'admin' && await bcrypt.compare(password, user.password_hash)) {
-      return user;
-    }
-    return null;
+    // 使用独立管理后台账号，不与 users 表共用
+    if (email !== process.env.ADMIN_EMAIL) return null;
+    if (!await bcrypt.compare(password, process.env.ADMIN_PASSWORD_HASH)) return null;
+    return { email, role: 'admin' };
   },
   cookiePassword: process.env.ADMIN_COOKIE_SECRET,
 });
@@ -559,8 +610,8 @@ GET    /api/admin/config/database      # 获取当前 DB 配置（密码脱敏�
 POST   /api/admin/config/database      # 更新 DB 配置 + 重连
 GET    /api/admin/config/schema        # 获取表结构信息
 POST   /api/admin/config/init-tables   # 一键建表
-GET    /api/admin/config/api-keys      # 获取 API Key（脱敏）
-POST   /api/admin/config/api-keys      # 批量保存 API Key
+GET    /api/admin/config/api-keys      # 获取 API Key 状态（是否已设置，不回显实际值）
+POST   /api/admin/config/api-keys      # 批量保存 API Key（前端只传，不回显旧值）
 GET    /api/admin/status               # DB 连接状态 + 各表状态
 
 # AdminJS（仅 admin）
@@ -679,4 +730,5 @@ export function createRepository<T extends { id: string }>(collectionName: strin
 | 2026-07-03 | extraRequirements 存入 contents 表 | 重试时需要用到用户原始补充要求 |
 | 2026-07-03 | 默认 Prompt = 用户最新模板 | 自动设置，支持手动切换。is_default 列标记 |
 | 2026-07-03 | 版本号系统生成 V1→V2→V3 | 不允许用户手动输入版本号 |
-| 2026-07-03 | SPEC 去掉 Temperature 记录 | 内容生成场景不需要记录模型温度参数 |
+| 2026-07-03 | AdminJS 使用独立管理后台账号 | 与应用用户系统隔离，通过 ADMIN_EMAIL/ADMIN_PASSWORD_HASH 环境变量配置 |
+| 2026-07-03 | 敏感数据加密存储 + 不回显 | API Key / DB 密码 AES-256-GCM 加密落库，前端仅保存时展示一次，此后只返回 isSet:boolean |
