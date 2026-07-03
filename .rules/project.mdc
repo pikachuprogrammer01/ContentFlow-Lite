@@ -1,3 +1,53 @@
-# Project
+---
+description: ContentFlow Lite 项目级决策与默认配置
+alwaysApply: true
+---
 
-MVP优先；保持模块边界清晰；新增能力先更新PRD。
+# Project Rules
+
+## 一、核心原则
+
+MVP 优先；保持模块边界清晰；新增能力先更新 PRD/SPEC。
+
+---
+
+## 二、默认模型配置
+
+AI 模型决策受 `.rules/provider.mdc` 约束，这里列出简洁摘要：
+
+| 用途 | 默认模型 | 接入方式 |
+|------|---------|----------|
+| 文字生成（主） | Gemini 2.0 Flash | Google AI Studio |
+| 文字生成（兜底） | DeepSeek V4 Flash | deepseek.com API |
+| 图片生成 | FLUX.1 [schnell] | Together AI API |
+
+所有 Provider 实现必须遵守 `.rules/provider.mdc` 的架构约束。
+
+---
+
+## 三、技术选型
+
+| 层 | 技术 | 版本约束 |
+|---|---|---|
+| 框架 | Vue 3 | Composition API + `<script setup>` |
+| 语言 | TypeScript | 6.x，严格模式 |
+| 构建 | Vite | 8.x |
+| 状态 | Pinia | 3.x |
+| 路由 | Vue Router | 4.x |
+| 包管理 | pnpm | 最新 |
+
+---
+
+## 四、包管理
+
+- 必须使用 pnpm
+- `pnpm-lock.yaml` 必须提交
+- `package.json` 中 `packageManager` 字段指定 pnpm 版本
+
+---
+
+## 五、外部依赖原则
+
+- 优先使用项目已有模块
+- 新增 npm 包需评估必要性
+- 禁止引入与已有模块职责重叠的库

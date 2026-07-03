@@ -99,6 +99,25 @@ rules/coding.mdc
 
 ---
 
+## 6. AI Provider 类任务
+
+读取：
+
+rules/provider.mdc
+
+关注内容：
+
+- 默认模型配置（文字/图片）
+- Provider 接口实现规范
+- API Key 管理方式
+- 模型切换与兜底策略
+- 扩展现有 Provider 的规则
+
+文本生成默认使用 Gemini 2.0 Flash（主）→ DeepSeek V4 Flash（兜底）。
+图片生成默认使用 FLUX.1 [schnell] via Together AI。
+
+---
+
 # 四、系统执行链路（抽象级）
 
 ```text
