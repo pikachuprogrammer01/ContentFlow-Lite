@@ -292,15 +292,38 @@ Prompt 输出必须严格匹配 Content DTO：
 1. **用户手动输入** — 用户在编辑页为该 Page 填写 → 优先使用
 2. **系统默认** — 用户未填写 → 使用默认模板
 
-### 默认 prompt 设计（不过度设计）：
+### 默认 prompt 设计
+
+默认中文 prompt，用户始终看到中文、用中文修改。翻译为英文发给 FLUX 是 Provider 层实现细节。
 
 ```ts
-function buildDefaultImagePrompt(page: Page): string {
-  return `${page.title} - ${page.content.slice(0, 100)}, clean illustration style`;
+function buildDefaultImagePrompt(page: Page, topic: string): string {
+  const snippet = page.content.slice(0, 100);
+  return `一张高质量的社交媒体配图。
+主题：${topic}
+标题：${page.title}
+内容摘要：${snippet}
+风格：明亮简洁，适合图文展示`;
 }
 ```
 
-简单拼接 page.title + 100 字正文摘要 + 干净风格，英文输出（FLUX 友好）。
+### 图片比例
+
+比例由用户在编辑页自行选择，不写死在默认 prompt 中。
+
+UI 提供选择器，默认比例见常量：
+
+```ts
+const IMAGE_RATIOS = [
+  { value: '1:1',  label: '1:1 正方形' },
+  { value: '3:4',  label: '3:4 竖版（推荐）' },
+  { value: '4:3',  label: '4:3 横版' },
+  { value: '9:16', label: '9:16 全屏竖版' },
+  { value: '16:9', label: '16:9 横版宽屏' },
+];
+```
+
+最终 prompt 由默认模板 + 用户选择的比例拼接而成，发给 Provider。
 
 ### 触发规则：
 
