@@ -119,7 +119,7 @@ MVP 阶段实现以下目标：
 Markdown / JSON 导出
       │
       ▼
-持久化到 TiDB
+持久化到 MySQL 兼容数据库
 
 ```
 
@@ -257,7 +257,7 @@ JSON
 
 - Gemini / DeepSeek / 硅基流动 / 通义万相 四个平台
 - 所有 Key 脱敏展示（仅显示前后各 4 位）
-- 存储到 TiDB user_settings 表
+- 存储到 user_settings 表（数据库）
 - 闭包内存缓存兜底
 
 ### 7.3 数据库管理

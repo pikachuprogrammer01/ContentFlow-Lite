@@ -1,5 +1,5 @@
 ---
-description: ContentFlow Lite 后端架构规范（Express + TiDB + AdminJS + 认证安全）
+description: ContentFlow Lite 后端架构规范（Express + MySQL 兼容数据库 + AdminJS + 认证安全）
 alwaysApply: true
 ---
 
@@ -10,7 +10,7 @@ alwaysApply: true
 | 层 | 技术 | 说明 |
 |---|---|---|
 | API 框架 | **Express** | 生态最大，AdminJS/认证/安全中间件开箱即用 |
-| 数据库 | **TiDB**（MySQL 兼容） | 用户已有 TiDB 账户 |
+| 数据库 | **MySQL 兼容数据库** | 不绑定平台：本地 MySQL / TiDB / MariaDB / PlanetScale / RDS 等任意 MySQL 兼容库 |
 | 数据库驱动 | **mysql2** | Node.js MySQL 客户端 |
 | ORM | **TypeORM**（可选） | 与 AdminJS 集成用，repository 层可直接写 SQL |
 | 数据库管理 | **AdminJS** + `@adminjs/express` + `@adminjs/typeorm` | 自动生成 CRUD 界面 |
@@ -61,7 +61,7 @@ ContentFlow Lite
 │   │   ├── rate-limit.ts         # 限流
 │   │   └── cors.ts
 │   ├── db/
-│   │   ├── client.ts             # TiDB 连接池（mysql2）
+│   │   ├── client.ts             # MySQL 连接池（mysql2，兼容 MySQL/TiDB/MariaDB）
 │   │   ├── schema.ts             # 建表 SQL
 │   │   ├── api-key-store.ts      # API Key 管理（闭包缓存）
 │   │   └── repositories/
@@ -79,7 +79,7 @@ ContentFlow Lite
 
 ---
 
-## 三、数据库表设计（TiDB / MySQL 兼容）
+## 三、数据库表设计（MySQL 兼容，含 TiDB/MariaDB 等）
 
 ### 3.1 users — 用户表
 
@@ -187,11 +187,11 @@ CREATE TABLE user_settings (
 
 | 原则 | 说明 |
 |------|------|
-| **JSON 字段存储复杂结构** | titles / pages / tags / metadata 等嵌套结构用 JSON，TiDB 完整支持 |
+| **JSON 字段存储复杂结构** | titles / pages / tags / metadata 等用 JSON，MySQL 5.7+ / TiDB / MariaDB 均支持，避免大量关联表 |
 | **UNIQUE KEY 防覆盖** | `prompt_versions(prompt_id, version)` 唯一约束，强制版本只增不改 |
 | **所有业务表带 user_id** | 多用户隔离，查询时带上 `WHERE user_id = ?` |
 | **生成记录冗余** | `generation_records` 冗余 topic/platform/model，列表查询无需 JOIN |
-| **不用外键约束** | 应用层保证一致性，避免 TiDB 分布式场景下的外键性能损耗 |
+| **不用外键约束** | 应用层保证一致性，避免不同 MySQL 版本/分布式场景下外键性能损耗 |
 | **VARCHAR(64) 主键** | 使用生成 ID，比自增 ID 更适合分布式 |
 | **user_settings 键值对** | 灵活扩展，无需改表结构即可新增配置项 |
 
@@ -281,17 +281,17 @@ router.beforeEach((to, from, next) => {
 
 .env                ← 启动默认值（DB 连接 / JWT Secret）
 server/config.json  ← 用户通过设置页覆盖（不写死在代码里）
-TiDB user_settings  ← API Key 等用户级业务配置
+DB user_settings    ← API Key 等用户级业务配置（存于所连接数据库中）
 ```
 
 ### 7.2 环境变量
 
 ```
-TIDB_HOST=          # TiDB 主机
-TIDB_PORT=4000      # TiDB 端口
-TIDB_USER=          # 用户名
-TIDB_PASSWORD=      # 密码
-TIDB_DATABASE=      # 数据库名
+DB_HOST=          # 数据库主机（MySQL/TiDB/MariaDB 等任意 MySQL 兼容库）
+DB_PORT=3306      # 端口（MySQL 默认 3306，TiDB 默认 4000）
+DB_USER=          # 用户名
+DB_PASSWORD=      # 密码
+DB_DATABASE=      # 数据库名
 JWT_SECRET=         # JWT 签名密钥（生产环境必须换强随机值）
 JWT_REFRESH_SECRET= # Refresh Token 签名密钥
 ```
@@ -378,7 +378,7 @@ app.use(admin.options.rootPath, adminRouter);
 
 | 功能 | 实现 |
 |---|---|
-| 数据库连接配置 + 测试连接 | 手写 Vue 表单 → Hono API（替换为 Express 路由同名路径） |
+| 数据库连接配置 + 测试连接 | 手写 Vue 表单 → Express 路由 |
 | 表结构浏览 + 记录管理 | **AdminJS** 自动生成（零前端代码） |
 | API Key 管理 | 手写 Vue 表单 → 存 `user_settings` 表 + 闭包内存缓存 |
 
@@ -468,8 +468,8 @@ interface APIError {
 
 ```
 离线模式：LocalStorageRepository → localStorage
-在线模式：HttpRepository → Express API → TiDB
-降级策略：TiDB 不可用 → 自动切换 LocalStorageRepository → UI 显示「离线模式」
+在线模式：HttpRepository → Express API → 数据库
+降级策略：数据库不可用 → 自动切换 LocalStorageRepository → UI 显示「离线模式」
 ```
 
 ### 10.2 前端新增模块
@@ -504,8 +504,8 @@ export function createRepository<T extends { id: string }>(collectionName: strin
 | 日期 | 决策 | 原因 |
 |------|------|------|
 | 2026-07-03 | 后端框架 = Express（从 Hono 调整） | AdminJS 需要 Express、认证/安全生态成熟 |
-| 2026-07-03 | 数据库 = TiDB（MySQL 兼容） | 用户已有账户，成熟稳定 |
-| 2026-07-03 | 复杂结构用 JSON 字段 | TiDB 支持 MySQL JSON，减少关联表 |
+| 2026-07-03 | 数据库 = MySQL 兼容（不绑定 TiDB） | 用户可自由选择 MySQL/TiDB/MariaDB/RDS |
+| 2026-07-03 | 复杂结构用 JSON 字段 | MySQL 5.7+ / TiDB 均支持，减少关联表 |
 | 2026-07-03 | 加入用户系统（users 表） | 数据库管理需要权限控制 |
 | 2026-07-03 | 认证 = JWT + bcryptjs | 无状态、适合 SPA、Express 生态 |
 | 2026-07-03 | 数据库管理 = AdminJS + TypeORM | 自动生成 CRUD 界面，零前端代码 |

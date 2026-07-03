@@ -127,17 +127,17 @@ rules/backend.mdc
 关注内容：
 
 - Express 后端架构与分层约束
-- TiDB 数据库连接方式（mysql2 + TypeORM）
+- MySQL 兼容数据库 — 不绑定平台，支持本地 MySQL / TiDB / MariaDB / PlanetScale / RDS
 - 六张核心表（users / contents / prompt_templates / prompt_versions / generation_records / user_settings）
 - RESTful API 路由设计（含认证 / 管理接口）
 - JWT 认证系统（登录 / 注册 / Token 刷新 / 路由守卫）
 - AdminJS 数据库管理面板（仅 admin 可访问）
 - 配置系统（.env + config.json 双层 + API Key 闭包缓存）
 - 安全规范（bcrypt / rate limit / helmet / CORS / SQL 注入防护）
-- 离线降级策略（TiDB 不可用时自动切换 localStorage）
+- 离线降级策略（数据库不可用时自动切换 localStorage）
 - 后端禁止含业务逻辑（路由只做校验 → repository 只做 CRUD）
 
-后端使用 Express + AdminJS，六张 TiDB 表，前端 localStorage 作为离线降级。
+后端使用 Express + AdminJS，六张 MySQL 兼容表，前端 localStorage 作为离线降级。
 
 ---
 
@@ -156,7 +156,7 @@ Parser
  ↓
 Content DTO
  ↓
-Export / Storage（前端 localStorage + 后端 TiDB）
+Export / Storage（前端 localStorage + 后端 MySQL 兼容数据库）
 ```
 
 ---

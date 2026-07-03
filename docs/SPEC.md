@@ -125,7 +125,7 @@ Workflow Engine 是整个系统唯一的业务入口。
         ┌─────────────────┼─────────────────┐
         ▼                 ▼                 ▼
  Prompt Builder      AI Provider       Storage
-        │                 │            (TiDB + localStorage)
+        │                 │            (MySQL 兼容 DB + localStorage)
         └─────────┬───────┘
                   ▼
              AI 原始返回内容
@@ -154,7 +154,7 @@ Workflow Engine 是整个系统唯一的业务入口。
 - Parser 负责数据转换。
 - DTO 负责数据传递。
 - Exporter 负责导出。
-- Storage / TiDB 负责持久化。
+- Storage / 数据库 负责持久化。
 - AdminJS 负责数据库可视化管理。
 
 所有模块均采用单向依赖，禁止跨层调用。
@@ -263,7 +263,7 @@ Workflow 不负责：
 
 包括：
 
-- Storage（TiDB + localStorage 双模）
+- Storage（MySQL 兼容数据库 + localStorage 双模）
 - Exporter
 - AdminJS Panel（数据库管理）
 - Logger
