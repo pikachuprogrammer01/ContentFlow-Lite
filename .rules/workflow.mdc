@@ -234,24 +234,28 @@ Output Node
 
 ---
 
-## 五、Workflow 数据流
+## 五、Workflow 数据流（后端执行）
+
+Workflow 在后端 `server/workflow/` 执行，前端通过 `POST /api/generate` 触发。
 
 ```text
-User Input
+POST /api/generate (前端)
     ↓
-Input Node
+Input Node（参数校验）
     ↓
-Prompt Builder
+Prompt Node（Template → Builder → Final Prompt）
     ↓
-AI Provider
+Provider Node（调用 AI 模型 — server/providers/）
     ↓
-Raw Response
+Parse Node（解析 AI 原始输出）
     ↓
-Parser
+Validate Node（OutputSchema 校验，失败重试）
     ↓
-Content DTO
+DTO Node（组装 Content DTO）
     ↓
-Editor / Exporter / Storage
+Output Node → 返回 Content DTO 给前端
+    ↓
+Editor / Exporter / Storage（前端渲染）
 ```
 
 ---

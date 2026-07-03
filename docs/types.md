@@ -267,11 +267,12 @@ interface UserInfo {
 }
 
 interface LoginRequest {
-  email: string;
+  account: string;   // 用户名 或 邮箱
   password: string;
 }
 
 interface RegisterRequest {
+  username: string;       // 必填，对应 users.username
   email: string;
   password: string;
   confirmPassword: string;

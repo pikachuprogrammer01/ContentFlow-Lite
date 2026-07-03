@@ -1994,4 +1994,23 @@ Output Node
 
 降低新增导出格式的开发成本，实现 Markdown、JSON、HTML、PDF 等导出能力的持续扩展，而无需修改核心业务代码。
 
+# 14. 部署方案
+
+| 组件 | 平台 | 说明 |
+|------|------|------|
+| 前端 | **GitHub Pages** | 静态 SPA，`vite build` 后部署。路由使用 hash 模式 |
+| 后端 | **Vercel** | Express API，Node.js 运行时。通过 `vercel.json` 配置 |
+| 数据库 | 用户自备 | MySQL 兼容（本地/TiDB/MariaDB/RDS），通过 `.env` 的 `DB_*` 变量配置连接 |
+
+不做 Docker 封装，不做移动端适配，不做国际化。
+
+# 15. API 文档方案
+
+使用 **swagger-jsdoc + @scalar/express-api-reference**：
+
+- 路由上写 JSDoc 注释（`@swagger`），自动生成 OpenAPI spec
+- `@scalar/express-api-reference` 渲染现代 API 文档页（挂载 `/api-docs`）
+- 不单独维护手写 API 文档文件
+- 注释中的 summaries/descriptions 使用中文
+
 以上设计决策属于系统长期约束，新功能开发应优先遵循本规范，而不是修改既有架构。

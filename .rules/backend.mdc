@@ -18,9 +18,11 @@ alwaysApply: true
 | 密码哈希 | **bcryptjs** | cost=12 |
 | 数据加密 | **AES-256-GCM**（Node.js crypto） | API Key / DB 密码等敏感字段落库前加密，读取时解密 |
 | 安全头 | **helmet** | HTTP 安全头 |
-| 限流 | **express-rate-limit** | 登录接口 5 次/分钟/IP |
+| 限流 | **express-rate-limit** | 登录 5次/分钟/IP + `/api/generate` 10次/分钟/用户 |
 | 缓存 | **Redis**（可选） | API Key 热缓存，不配则直接查 DB |
-| 部署 | Node.js 服务 | 与前端分离部署 |
+| 部署 | **Vercel**（后端，默认） | Node.js 服务，与前端分离部署 |
+| 组件库 | **Naive UI** | Vue 3 原生、TypeScript-first、tree-shaking 最优、中文文档完善 |
+| API 文档 | **swagger-jsdoc + @scalar/express-api-reference** | JSDoc 注释自动生成 OpenAPI spec，Scalar 渲染现代 API 文档页 |
 
 ### 选型理由
 
@@ -52,7 +54,7 @@ ContentFlow Lite
 │   ├── index.ts                  # 入口：启动 Express 服务
 │   ├── app.ts                    # Express app 配置（中间件/路由挂载）
 │   ├── routes/
-│   │   ├── auth.ts               # /api/auth/login | register | refresh | me
+│   │   ├── auth.ts               # /api/auth/login | register | refresh | me | reset-password
 │   │   ├── content.ts            # /api/content/*
 │   │   ├── prompt.ts             # /api/prompt/*
 │   │   ├── generate.ts           # /api/generate
@@ -62,6 +64,21 @@ ContentFlow Lite
 │   │   ├── admin-guard.ts        # 仅允许 role=admin
 │   │   ├── rate-limit.ts         # 限流
 │   │   └── cors.ts
+│   ├── workflow/                 # Workflow 引擎（后端执行 7 节点 Pipeline）
+│   │   ├── index.ts              # Workflow 入口
+│   │   └── nodes/
+│   │       ├── input.ts          # Input Node
+│   │       ├── prompt.ts         # Prompt Node
+│   │       ├── provider.ts       # Provider Node
+│   │       ├── parse.ts          # Parse Node
+│   │       ├── validate.ts       # Validate Node
+│   │       ├── dto.ts            # DTO Node
+│   │       └── output.ts         # Output Node
+│   ├── providers/                # AI Provider 封装（后端调用 AI SDK）
+│   │   ├── gemini-provider.ts
+│   │   ├── deepseek-provider.ts
+│   │   ├── siliconflow-provider.ts
+│   │   └── tongyi-provider.ts
 │   ├── db/
 │   │   ├── client.ts             # MySQL 连接池（mysql2，兼容 MySQL/TiDB/MariaDB）
 │   │   ├── schema.ts             # 建表 SQL
@@ -330,6 +347,12 @@ const admin = new AdminJS({
     ├─ 验证 refresh token
     └─ 返回新的 access token
 
+密码重置
+  POST /api/auth/reset-password
+    ├─ 验证用户身份（email + 验证码 或 admin 操作）
+    ├─ 重置为默认密码（如 ContentFlow@123）
+    └─ 返回新密码（仅此一次展示）
+
 获取当前用户
   GET /api/auth/me
     └─ 返回用户信息（不含 password_hash）
@@ -341,6 +364,7 @@ const admin = new AdminJS({
 - 验证失败 → HTTP 401 `{ error: { code: "UNAUTHORIZED" } }`
 - 验证成功 → 将 `{ userId, username, role }` 挂到 `req.user`
 - 前端 Store 在每次请求时自动带 `Authorization: Bearer <token>`
+- access token 和 refresh token 存于 localStorage，通过 CSP 头防御 XSS
 
 ### 5.3 前端认证状态
 
@@ -374,7 +398,8 @@ router.beforeEach((to, from, next) => {
 | XSS | 输入转义 + CSP 头 | `helmet()` + 前端 Vue 默认转义 |
 | CORS | 仅允许前端域名 | `cors({ origin: frontendUrl })` |
 | 登录爆破 | Rate Limit | `express-rate-limit` 登录路由 5 次/分钟/IP |
-| Token 泄露 | 短 access token (15min) + refresh 轮换 | JWT `expiresIn: '15m'` |
+| AI 生成滥用 | Rate Limit | `express-rate-limit` `/api/generate` 10 次/分钟/用户 |
+| Token 泄露 | 短 access token (15min) + refresh 轮换 + localStorage + CSP 防御 XSS | JWT `expiresIn: '15m'` + Helmet CSP `script-src 'self'` |
 | API Key 泄露 | 加密存储 + 前端不回显 + API 不返回实际值 | AES-256-GCM 加密 + isSet 布尔响应 |
 | 请求体过大 | 限制大小 | `express.json({ limit: '10mb' })` |
 | 安全头 | `helmet()` | Express 中间件 |
@@ -581,10 +606,11 @@ app.use(admin.options.rootPath, adminRouter);
 
 ```
 # 认证
-POST   /api/auth/register     # 注册
-POST   /api/auth/login        # 登录
-POST   /api/auth/refresh      # 刷新 token
-GET    /api/auth/me            # 获取当前用户
+POST   /api/auth/register        # 注册
+POST   /api/auth/login           # 登录
+POST   /api/auth/refresh         # 刷新 token
+POST   /api/auth/reset-password  # 密码重置（admin 或邮箱验证）
+GET    /api/auth/me              # 获取当前用户
 
 # 内容（需认证）
 GET    /api/content            # 内容列表（当前用户）
@@ -733,3 +759,18 @@ export function createRepository<T extends { id: string }>(collectionName: strin
 | 2026-07-03 | 版本号系统生成 V1→V2→V3 | 不允许用户手动输入版本号 |
 | 2026-07-03 | AdminJS 使用独立管理后台账号 | 与应用用户系统隔离，通过 ADMIN_EMAIL/ADMIN_PASSWORD_HASH 环境变量配置 |
 | 2026-07-03 | 敏感数据加密存储 + 不回显 | API Key / DB 密码 AES-256-GCM 加密落库，前端仅保存时展示一次，此后只返回 isSet:boolean |
+| 2026-07-03 | Workflow 在后端执行 | 前端 POST /api/generate 触发，后端运行 7 节点 Pipeline 后返回 Content DTO |
+| 2026-07-03 | Provider 无自动切换 | 用户手动选择 Provider，给了哪个 Key 就用哪个。不做自动 fallback |
+| 2026-07-03 | Provider 代码放后端 `server/providers/` | API Key 存后端 DB，AI 调用只能后端发起 |
+| 2026-07-03 | Token 存储 = localStorage + CSP | httpOnly Cookie 跨域配置复杂，localStorage + Helmet CSP `script-src 'self'` 足够 |
+| 2026-07-03 | 密码重置流程 | 忘记密码 → 二次确认 → 重置为默认密码 → 提示用户修改 |
+| 2026-07-03 | 限流扩展 | `/api/generate` 10次/分钟/用户，防止 AI 调用成本失控 |
+| 2026-07-03 | 导出 = 浏览器默认下载（Markdown/JSON） | client-side Blob 下载，存放位置用户自行决定 |
+| 2026-07-03 | 组件库 = Naive UI | Vue 3 原生、TypeScript-first、tree-shaking、中文文档 |
+| 2026-07-03 | API 文档 = swagger-jsdoc + @scalar/express-api-reference | JSDoc 注释自动生成，不手写独立 API 文档文件 |
+| 2026-07-03 | 测试 = Vitest（单测 + E2E） | 纯逻辑函数必须写单测 |
+| 2026-07-03 | 部署 = 后端 Vercel + 前端 GitHub Pages | 默认方案，不做限制 |
+| 2026-07-03 | 不做移动端适配 | desktop-only |
+| 2026-07-03 | 不做国际化 | 中文 UI |
+| 2026-07-03 | 不做离线模式 | 数据库不可用 → 错误页，不做 localStorage 离线缓存 |
+| 2026-07-03 | CSP 策略 | Helmet `script-src 'self'; object-src 'none'; base-uri 'self'`，防御 XSS |

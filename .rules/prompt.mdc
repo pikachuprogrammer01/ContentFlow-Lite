@@ -202,16 +202,21 @@ Final Prompt 是最终发送给 AI 的内容。
 
 ## 九、OutputSchema — 输出结构校验
 
-每个 Prompt Template 必须附带 `outputSchema`，用于程序化校验 AI 输出是否符合预期结构。
+每个 Prompt Template 必须附带 `outputSchema`，用于程序化校验 AI 输出是否符合预期结构。定义以 `docs/types.md` §3.3 为准。
 
 ### 定义：
 
 ```ts
+// 详见 docs/types.md §3.3
 interface OutputSchema {
-  required: string[];
-  fieldTypes: Record<string, 'string' | 'string[]' | 'object' | 'array'>;
-  minItems?: Record<string, number>;
-  maxItems?: Record<string, number>;
+  fields: OutputSchemaField[];
+}
+
+interface OutputSchemaField {
+  name: string;
+  type: 'string' | 'number' | 'array' | 'object';
+  required: boolean;
+  children?: OutputSchemaField[];  // 嵌套对象/数组的字段
 }
 ```
 
@@ -219,13 +224,27 @@ interface OutputSchema {
 
 ```ts
 {
-  required: ['titles', 'cover', 'pages', 'tags', 'summary'],
-  fieldTypes: {
-    titles: 'array', cover: 'object', pages: 'array',
-    tags: 'string[]', summary: 'string'
-  },
-  minItems: { titles: 5, pages: 6, tags: 5 },
-  maxItems: { titles: 10, pages: 8, tags: 10 }
+  fields: [
+    { name: 'titles', type: 'array', required: true },
+    { name: 'cover', type: 'object', required: true,
+      children: [
+        { name: 'title', type: 'string', required: true },
+        { name: 'subtitle', type: 'string', required: false },
+      ]
+    },
+    { name: 'pages', type: 'array', required: true,
+      children: [
+        { name: 'text', type: 'string', required: true },
+        { name: 'imagePrompt', type: 'string', required: false },
+      ]
+    },
+    { name: 'tags', type: 'array', required: true,
+      children: [
+        { name: '', type: 'string', required: true },  // string[] 元素
+      ]
+    },
+    { name: 'summary', type: 'string', required: true },
+  ]
 }
 ```
 

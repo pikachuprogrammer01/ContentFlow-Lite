@@ -79,10 +79,10 @@ rules/ui.mdc
 
 关注内容：
 
-- UI 只负责渲染 DTO
-- 不允许业务逻辑
-- Workflow 调用方式
+- UI 只负责渲染 DTO，不允许业务逻辑
+- Workflow 调用方式（POST /api/generate → 后端执行 Pipeline）
 - 状态管理规范
+- **组件库：Naive UI** — 优先使用 Naive UI 组件，没有的才自行实现
 
 ---
 
@@ -115,7 +115,7 @@ rules/provider.mdc
 - 模型切换与兜底策略
 - 扩展现有 Provider 的规则
 
-文本生成默认使用 Gemini 2.0 Flash（主）→ DeepSeek V4 Flash（兜底）→ 硅基流动 Qwen2.5-72B（备选）。
+文本生成：用户手动选择 Provider（Gemini 2.0 Flash / DeepSeek V4 Flash / 硅基流动 Qwen2.5-72B），不做自动切换。给了哪个 Key 用哪个。
 图片生成默认使用通义万相 2.0。
 
 ---
@@ -131,11 +131,12 @@ rules/backend.mdc
 - Express 后端架构与分层约束
 - MySQL 兼容数据库 — 不绑定平台，支持本地 MySQL / TiDB / MariaDB / PlanetScale / RDS
 - 八张核心表（users / contents / prompt_templates / prompt_versions / generation_records / user_settings / publish_records / app_logs）
-- RESTful API 路由设计（含认证 / 管理接口）
-- JWT 认证系统（登录 / 注册 / Token 刷新 / 路由守卫）
+- RESTful API 路由设计（含认证 / 管理接口 / 密码重置 / 限流）
+- JWT 认证系统（登录 / 注册 / Token 刷新 / 路由守卫），Token 存 localStorage + CSP 防 XSS
 - AdminJS 数据库管理面板（仅 admin 可访问）
 - 配置系统（.env + config.json 三层 + Redis API Key 缓存，Redis 可选）
-- 安全规范（bcrypt / rate limit / helmet / CORS / SQL 注入防护）
+- 安全规范（bcrypt / rate limit / helmet CSP / CORS / SQL 注入防护 / AES-256-GCM 加密）
+- 限流：登录 5次/分钟/IP + `/api/generate` 10次/分钟/用户
 - 无离线模式（数据库不可用时 App 不可用，不做 localStorage 缓存）
 - 后端禁止含业务逻辑（路由只做校验 → repository 只做 CRUD）
 
@@ -158,22 +159,35 @@ rules/logging.mdc
 - app_logs 表结构与写入规则
 - 环境变量控制（LOG_LEVEL / LOG_TO_DB / VITE_LOG_LEVEL）
 
+## 9. API 文档类任务
+
+读取：
+
+rules/backend.mdc（API 文档方案）
+
+关注内容：
+
+- **swagger-jsdoc + @scalar/express-api-reference** — 在路由上写 JSDoc 注释，自动生成 OpenAPI 文档
+- 不单独维护手写 API 文档文件
+- 注释用中文写 summaries/descriptions
+
 ---
 
 # 四、系统执行链路（抽象级）
 
 ```text
-UI
+前端 UI (Vue 3 + Naive UI)
  ↓
-Workflow
+POST /api/generate → Express 后端
  ↓
-Prompt Builder
+Workflow (server/workflow/ — 7 节点 Pipeline)
+ │  Input → Prompt → Provider → Parse → Validate → DTO → Output
  ↓
-AI Model
+Provider 层 (server/providers/ — 调用 AI SDK)
  ↓
-Parser
+AI Model (Gemini / DeepSeek / 硅基流动 / 通义万相)
  ↓
-Content DTO
+Parser → Content DTO
  ↓
 Export / Storage（后端 MySQL 兼容数据库）
 ```

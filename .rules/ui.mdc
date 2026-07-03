@@ -5,6 +5,19 @@ alwaysApply: true
 
 # UI Rules
 
+## 零、组件库选型
+
+| 决策 | 内容 |
+|------|------|
+| 组件库 | **Naive UI** |
+| 选型理由 | Vue 3 原生、TypeScript-first、`sideEffects: false` 最优 tree-shaking、中文文档完善、主题编辑器开箱即用 |
+| 图标 | Naive UI 内建图标或 `@vicons/ionicons5` |
+| CSS 工具 | Naive UI 自带 CSS 变量主题体系，不额外引入 Tailwind |
+
+所有 UI 组件优先使用 Naive UI 提供的。Naive UI 没有的组件（如 Markdown 渲染器）才自行实现。
+
+---
+
 ## 一、核心目标
 
 UI 层的唯一职责是：
