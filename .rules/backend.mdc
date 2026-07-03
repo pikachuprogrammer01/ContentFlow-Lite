@@ -184,6 +184,25 @@ CREATE TABLE user_settings (
 ) COMMENT='用户设置表 — API Key、偏好等键值对';
 ```
 
+### 3.7 publish_records — 发布记录表
+
+```sql
+CREATE TABLE publish_records (
+  id           VARCHAR(64)  PRIMARY KEY COMMENT '记录唯一 ID',
+  user_id      VARCHAR(64)  NOT NULL COMMENT '所属用户',
+  content_id   VARCHAR(64)  NOT NULL COMMENT '关联的 Content ID',
+  platform     VARCHAR(50)  NOT NULL COMMENT '发布平台：xiaohongshu/douyin/gongzhonghao',
+  title_used   VARCHAR(500) COMMENT '实际使用的标题',
+  published_at DATETIME     COMMENT '用户标记的发布时间',
+  notes        TEXT         COMMENT '用户备注',
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_user_content (user_id, content_id),
+  INDEX idx_platform (platform)
+) COMMENT='发布记录表 — 追踪内容发布到哪些平台';
+```
+
+说明：各内容平台大多无开放发布 API，本系统不直接对接。用户手动发布后回到编辑页标记"已发布"，系统记录发布轨迹。
+
 ---
 
 ## 四、表设计原则
@@ -221,6 +240,7 @@ CREATE TABLE user_settings (
 |---|---|
 | `prompt_versions` | 不允许单条删除。删父模板时级联删除整棵版本树 |
 | `generation_records` | 不允许删除（审计日志，只追加不修改） |
+| `publish_records` | 不允许删除（发布历史追溯） |
 | `users` | 不允许删除自己 |
 
 ### AdminJS 配置示例
@@ -606,5 +626,5 @@ export function createRepository<T extends { id: string }>(collectionName: strin
 | 2026-07-03 | 不做用量估算 | 各平台无公开余额 API，放账单链接让用户去官网查 |
 | 2026-07-03 | 双层配置（.env + config.json） | 数据库配置不在代码中写死 |
 | 2026-07-03 | 不选 Next.js | 前端已是 Vue |
-| 2026-07-03 | prompt_templates 加 type 字段 | 区分 text/image 模板，文字和图片版本分开管理 |
+| 2026-07-03 | 新增 publish_records 表 | 不做平台 API 对接，记录用户手动发布轨迹 |
 | 2026-07-03 | AdminJS 字段保护 | prompt_versions/generation_records/about等只读，防误操作 |
