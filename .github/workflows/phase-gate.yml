@@ -1,0 +1,32 @@
+name: Phase Gate (Server-Side)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  phase-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 需要 git tags
+
+      - name: 检查 Phase 链完整性
+        run: |
+          PHASE=$(cat .phase 2>/dev/null || echo "0")
+          echo "当前 Phase: $PHASE"
+
+          # 检查所有前置 Phase 都有 tag
+          for ((n=0; n<PHASE; n++)); do
+            if ! git tag -l "phase-${n}-done" | grep -q .; then
+              echo "❌ Phase $PHASE 进行中，但 Phase $n 缺少 phase-${n}-done 标签"
+              echo "   可能是 git push --no-verify 跳过了客户端检查"
+              exit 1
+            fi
+            echo "  ✅ Phase $n — phase-${n}-done tag 存在"
+          done
+
+          echo "✅ Phase 链完整 (Phase $PHASE, ${PHASE} 个前置 Phase 已达标)"

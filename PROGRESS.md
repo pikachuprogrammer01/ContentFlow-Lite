@@ -168,7 +168,14 @@
 1. **Phase 制推进** — 每个 Phase 有明确的入口条件、交付物、出口标准
 2. **硬指标锁死** — 出口由 `scripts/phase-gate.sh` 脚本强制执行，不是口头约定
 3. **进下一 Phase 唯一入口** — `pnpm phase:advance`。脚本会跑完全部检查，❌ 任何一项就不让进
-4. **Git 阻止越界** — `.git/hooks/pre-push` 检查所有之前的 Phase 都有 `phase-{N}-done` tag，缺一个就阻止 push
+4. **三层防线** — 防止跳过 Phase：
+
+| 防线 | 触发时机 | 行为 |
+|------|---------|------|
+| pre-commit hook | `git commit` | ⚠️ 软警告（不阻断），提示当前 Phase 待完成项 |
+| pre-push hook | `git push` | 🚫 硬阻断，缺任何前置 `phase-{N}-done` tag 就拒绝 |
+| GitHub Actions | CI / PR | 🚫 服务端硬阻断，`--no-verify` 跳不过 |
+
 5. **文档先行** — 每个 Phase 开始前，检查对应文档是否覆盖所有需求
 6. **可验证交付** — 每个 Milestone 必须有可运行的验证手段（curl / 浏览器 / 测试）
 
@@ -180,10 +187,12 @@ pnpm phase:check    # 跑当前 Phase 出口全套检查
 pnpm phase:advance  # 全部 ✅ → 写 .phase + git tag → 进入下一 Phase
 ```
 
-- `.phase` 文件记录当前 Phase（纯数字），禁止手动改
-- `scripts/phase-gate.sh` — 全部门检查逻辑
-- `scripts/pre-push-hook.sh` — Git push 前的 Phase 守卫
-- Phase 0/1 出口标准已在 `phase-gate.sh` 中固化，Phase 2-4 占位待补全
+- `.phase` 文件记录当前 Phase（纯数字）。pre-commit 检测手动篡改并警告
+- `scripts/phase-gate.sh` — 全部出口检查逻辑
+- `scripts/pre-commit-hook.sh` — git commit 时的软警告
+- `scripts/pre-push-hook.sh` — git push 时的硬阻断
+- `.github/workflows/phase-gate.yml` — CI 服务端验证，防 `--no-verify` 绕过
+- `pnpm install` 时自动安装两个 hooks 到 `.git/hooks/`
 
 ### 3.2 Phase 划分
 

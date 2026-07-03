@@ -10,7 +10,7 @@
     "phase:check": "bash scripts/phase-gate.sh check",
     "phase:advance": "bash scripts/phase-gate.sh advance",
     "phase:status": "bash scripts/phase-gate.sh status",
-    "postinstall": "bash -c '[ -d .git ] && ln -sf ../../scripts/pre-push-hook.sh .git/hooks/pre-push 2>/dev/null || true'"
+    "postinstall": "bash -c '[ -d .git ] && ln -sf ../../scripts/pre-commit-hook.sh .git/hooks/pre-commit 2>/dev/null; ln -sf ../../scripts/pre-push-hook.sh .git/hooks/pre-push 2>/dev/null || true'"
   },
   "dependencies": {
     "pinia": "^3.0.4",
