@@ -16,6 +16,9 @@ current_phase() {
 
 PHASE=$(current_phase)
 
+# 自检 hooks 完整性
+bash "$PROJECT_ROOT/scripts/enforce-phase.sh" 2>/dev/null || true
+
 # ── Phase 0 出口标准 ────────────────────────────────────────
 run_phase_0_checks() {
     local total=0 pass=0

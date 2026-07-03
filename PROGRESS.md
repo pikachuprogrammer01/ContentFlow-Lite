@@ -168,13 +168,32 @@
 1. **Phase 制推进** — 每个 Phase 有明确的入口条件、交付物、出口标准
 2. **硬指标锁死** — 出口由 `scripts/phase-gate.sh` 脚本强制执行，不是口头约定
 3. **进下一 Phase 唯一入口** — `pnpm phase:advance`。脚本会跑完全部检查，❌ 任何一项就不让进
-4. **三层防线** — 防止跳过 Phase：
+4. **保护模型** — 客户端是早期反馈，服务端是真正保证：
 
-| 防线 | 触发时机 | 行为 |
-|------|---------|------|
-| pre-commit hook | `git commit` | ⚠️ 软警告（不阻断），提示当前 Phase 待完成项 |
-| pre-push hook | `git push` | 🚫 硬阻断，缺任何前置 `phase-{N}-done` tag 就拒绝 |
-| GitHub Actions | CI / PR | 🚫 服务端硬阻断，`--no-verify` 跳不过 |
+```
+你写代码
+   │
+   ▼
+git commit ──→ pre-commit ⚠️ 警告（不阻断，让你知道还有 ❌）
+   │
+   ▼
+git push ──→ pre-push 🚫 阻断（缺 phase tag 就拒绝）
+   │
+   │ 如果有人 git push --no-verify 跳过客户端 ...
+   │
+   ▼
+GitHub Actions 🚫 阻断（服务端，跳不过）
+   │
+   ▼
+main 分支保护：Require PR + Require CI pass → 真正锁死
+```
+
+**关键设置（必须手动去 GitHub 配一次）：**
+Settings → Branches → Add rule → `main`
+- ☑ Require a pull request before merging
+- ☑ Require status checks to pass (`phase-gate`)
+
+配完这一条之后，任何代码要进 main 必须先过 CI Phase 检查。客户端绕过无效。**这才是 100%。**
 
 5. **文档先行** — 每个 Phase 开始前，检查对应文档是否覆盖所有需求
 6. **可验证交付** — 每个 Milestone 必须有可运行的验证手段（curl / 浏览器 / 测试）
