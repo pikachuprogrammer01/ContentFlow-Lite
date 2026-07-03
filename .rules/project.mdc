@@ -32,11 +32,13 @@ AI 模型决策受 `.rules/provider.mdc` 约束，这里列出简洁摘要：
 
 | 层 | 技术 |
 |---|---|
-| API 框架 | Hono |
+| API 框架 | Express |
 | 数据库 | TiDB（MySQL 兼容） |
-| 驱动 | mysql2 |
+| 驱动 | mysql2 + TypeORM |
+| 数据库管理 | AdminJS |
+| 认证 | JWT + bcryptjs |
 
-- 四张核心表：`contents` / `prompt_templates` / `prompt_versions` / `generation_records`
+- 六张核心表：`users` / `contents` / `prompt_templates` / `prompt_versions` / `generation_records` / `user_settings`
 - 前端 `LocalStorageRepository` 保留作为离线缓存，新增 `HttpRepository` 走后端 API
 
 ---

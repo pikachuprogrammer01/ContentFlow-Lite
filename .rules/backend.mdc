@@ -1,5 +1,5 @@
 ---
-description: ContentFlow Lite 后端架构规范（Hono + TiDB）
+description: ContentFlow Lite 后端架构规范（Express + TiDB + AdminJS + 认证安全）
 alwaysApply: true
 ---
 
@@ -9,16 +9,23 @@ alwaysApply: true
 
 | 层 | 技术 | 说明 |
 |---|---|---|
-| API 框架 | **Hono** | 轻量、TypeScript 原生、边缘部署 |
+| API 框架 | **Express** | 生态最大，AdminJS/认证/安全中间件开箱即用 |
 | 数据库 | **TiDB**（MySQL 兼容） | 用户已有 TiDB 账户 |
 | 数据库驱动 | **mysql2** | Node.js MySQL 客户端 |
+| ORM | **TypeORM**（可选） | 与 AdminJS 集成用，repository 层可直接写 SQL |
+| 数据库管理 | **AdminJS** + `@adminjs/express` + `@adminjs/typeorm` | 自动生成 CRUD 界面 |
+| 认证 | **JWT**（`jsonwebtoken`） | access token 15min + refresh token 7d |
+| 密码哈希 | **bcryptjs** | cost=12 |
+| 安全头 | **helmet** | HTTP 安全头 |
+| 限流 | **express-rate-limit** | 登录接口 5 次/分钟/IP |
 | 部署 | Node.js 服务 | 与前端分离部署 |
 
 ### 选型理由
 
+- ✅ Express — AdminJS 官方 `@adminjs/express` 适配器，认证/安全中间件生态最成熟
+- ❌ Hono — AdminJS 无官方适配器，需手写胶水代码，且认证/安全中间件覆盖度不如 Express
 - ❌ Next.js — 前端已是 Vue，用 Next.js 做纯 API 不合适
 - ❌ NestJS — 项目规模不大时过度工程
-- ✅ Hono — 代码量少、性能好、TS 原生、与 Vue 前端配合简洁
 
 ---
 
@@ -26,42 +33,74 @@ alwaysApply: true
 
 ```
 ContentFlow Lite
-├── src/                    # Vue 3 前端（已有）
+├── src/                          # Vue 3 前端（已有）
 │   ├── pages/
+│   │   ├── HomePage.vue          # 首页 — 生成内容
+│   │   ├── EditPage.vue          # 编辑页
+│   │   ├── HistoryPage.vue       # 历史
+│   │   ├── PromptPage.vue        # Prompt 管理
+│   │   ├── SettingsPage.vue      # 设置（新增）
+│   │   └── LoginPage.vue         # 登录注册（新增）
 │   ├── stores/
-│   ├── workflow/
+│   │   ├── content.ts
+│   │   └── auth.ts               # 认证状态（新增）
 │   └── ...
 │
-├── server/                 # Hono 后端（新增）
-│   ├── index.ts            # 入口：创建 Hono app，注册路由
+├── server/                       # Express 后端
+│   ├── index.ts                  # 入口：启动 Express 服务
+│   ├── app.ts                    # Express app 配置（中间件/路由挂载）
 │   ├── routes/
-│   │   ├── content.ts      # /api/content/*
-│   │   ├── prompt.ts       # /api/prompt/*
-│   │   └── generate.ts     # /api/generate（AI 生成）
+│   │   ├── auth.ts               # /api/auth/login | register | refresh | me
+│   │   ├── content.ts            # /api/content/*
+│   │   ├── prompt.ts             # /api/prompt/*
+│   │   ├── generate.ts           # /api/generate
+│   │   └── admin-config.ts       # /api/admin/config/*
+│   ├── middleware/
+│   │   ├── auth.ts               # JWT 验证中间件
+│   │   ├── admin-guard.ts        # 仅允许 role=admin
+│   │   ├── rate-limit.ts         # 限流
+│   │   └── cors.ts
 │   ├── db/
-│   │   ├── client.ts       # TiDB 连接池（mysql2）
-│   │   ├── schema.ts       # 建表 SQL
+│   │   ├── client.ts             # TiDB 连接池（mysql2）
+│   │   ├── schema.ts             # 建表 SQL
+│   │   ├── api-key-store.ts      # API Key 管理（闭包缓存）
 │   │   └── repositories/
 │   │       ├── content-repo.ts
 │   │       ├── prompt-repo.ts
-│   │       └── generation-repo.ts
-│   └── middleware/
-│       ├── cors.ts
-│       └── logger.ts
+│   │       ├── generation-repo.ts
+│   │       └── user-repo.ts
+│   ├── admin/
+│   │   └── index.ts              # AdminJS 配置（仅 admin 可访问）
+│   └── config.ts                 # 配置加载（.env + config.json 合并）
 │
-├── .env                    # 数据库 + API Key 配置
-└── package.json            # monorepo scripts
+├── .env                          # 环境变量（DB 连接 / JWT Secret）
+└── package.json                  # monorepo scripts
 ```
 
 ---
 
 ## 三、数据库表设计（TiDB / MySQL 兼容）
 
-### 3.1 contents — 内容表
+### 3.1 users — 用户表
+
+```sql
+CREATE TABLE users (
+  id            VARCHAR(64)   PRIMARY KEY COMMENT '用户唯一 ID',
+  username      VARCHAR(100)  NOT NULL UNIQUE COMMENT '用户名',
+  email         VARCHAR(200)  NOT NULL UNIQUE COMMENT '邮箱',
+  password_hash VARCHAR(255)  NOT NULL COMMENT 'bcrypt 哈希',
+  role          ENUM('admin','user') NOT NULL DEFAULT 'user' COMMENT '角色权限',
+  created_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) COMMENT='用户表';
+```
+
+### 3.2 contents — 内容表
 
 ```sql
 CREATE TABLE contents (
   id          VARCHAR(64)   PRIMARY KEY COMMENT 'Content DTO 的 id',
+  user_id     VARCHAR(64)   NOT NULL COMMENT '所属用户',
   topic       VARCHAR(500)  NOT NULL COMMENT '生成主题',
   platform    VARCHAR(50)   NOT NULL COMMENT '平台：xiaohongshu/douyin',
   titles      JSON          NOT NULL COMMENT 'Title[] 数组',
@@ -72,27 +111,30 @@ CREATE TABLE contents (
   metadata    JSON          NOT NULL COMMENT 'Metadata {promptId, version, model...}',
   created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_user_id (user_id),
   INDEX idx_platform (platform),
   INDEX idx_created_at (created_at)
 ) COMMENT='内容表 — 存储 Content DTO';
 ```
 
-### 3.2 prompt_templates — Prompt 模板表
+### 3.3 prompt_templates — Prompt 模板表
 
 ```sql
 CREATE TABLE prompt_templates (
   id            VARCHAR(64)   PRIMARY KEY COMMENT '模板唯一 ID',
+  user_id       VARCHAR(64)   NOT NULL COMMENT '所属用户',
   name          VARCHAR(200)  NOT NULL COMMENT '模板名称',
   platform      VARCHAR(50)   NOT NULL COMMENT '目标平台',
   system_prompt TEXT          NOT NULL COMMENT 'System Prompt 内容',
   user_prompt   TEXT          NOT NULL COMMENT 'User Prompt 模板（含 {{变量}}）',
   created_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_user_id (user_id),
   INDEX idx_platform (platform)
 ) COMMENT='Prompt 模板表';
 ```
 
-### 3.3 prompt_versions — Prompt 版本表
+### 3.4 prompt_versions — Prompt 版本表
 
 ```sql
 CREATE TABLE prompt_versions (
@@ -106,22 +148,37 @@ CREATE TABLE prompt_versions (
 ) COMMENT='Prompt 版本表 — 不可覆盖，只增不改';
 ```
 
-### 3.4 generation_records — 生成记录表
+### 3.5 generation_records — 生成记录表
 
 ```sql
 CREATE TABLE generation_records (
   id              VARCHAR(64)   PRIMARY KEY COMMENT '记录唯一 ID',
+  user_id         VARCHAR(64)   NOT NULL COMMENT '所属用户',
   content_id      VARCHAR(64)   NOT NULL COMMENT '关联的 Content ID',
-  topic           VARCHAR(500)  NOT NULL COMMENT '生成主题（冗余，便于列表查询）',
+  topic           VARCHAR(500)  NOT NULL COMMENT '生成主题（冗余）',
   platform        VARCHAR(50)   NOT NULL COMMENT '平台（冗余）',
   prompt_id       VARCHAR(64)   NOT NULL COMMENT '使用的 Prompt ID',
   prompt_version  VARCHAR(20)   NOT NULL COMMENT '使用的 Prompt 版本',
   model           VARCHAR(100)  NOT NULL COMMENT 'AI 模型名称',
   created_at      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_user_id (user_id),
   INDEX idx_content_id (content_id),
   INDEX idx_prompt_id (prompt_id),
   INDEX idx_created_at (created_at)
 ) COMMENT='生成记录表 — 追踪每次 AI 生成';
+```
+
+### 3.6 user_settings — 用户设置表
+
+```sql
+CREATE TABLE user_settings (
+  user_id   VARCHAR(64)  NOT NULL COMMENT '所属用户',
+  `key`     VARCHAR(100) NOT NULL COMMENT '设置键（如 gemini_api_key）',
+  `value`   TEXT         NOT NULL COMMENT '设置值',
+  updated_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, `key`),
+  INDEX idx_user_id (user_id)
+) COMMENT='用户设置表 — API Key、偏好等键值对';
 ```
 
 ---
@@ -130,110 +187,329 @@ CREATE TABLE generation_records (
 
 | 原则 | 说明 |
 |------|------|
-| **JSON 字段存储复杂结构** | titles / pages / tags / metadata 等嵌套结构用 JSON，TiDB 完整支持，避免建大量关联表 |
+| **JSON 字段存储复杂结构** | titles / pages / tags / metadata 等嵌套结构用 JSON，TiDB 完整支持 |
 | **UNIQUE KEY 防覆盖** | `prompt_versions(prompt_id, version)` 唯一约束，强制版本只增不改 |
-| **生成记录冗余** | `generation_records` 冗余 topic/platform，列表查询无需 JOIN |
-| **不用外键约束** | Content DTO 自包含，应用层保证一致性 |
-| **VARCHAR(64) 主键** | 使用生成 ID（如 `content_xxx`），比自增 ID 更适合分布式 |
+| **所有业务表带 user_id** | 多用户隔离，查询时带上 `WHERE user_id = ?` |
+| **生成记录冗余** | `generation_records` 冗余 topic/platform/model，列表查询无需 JOIN |
+| **不用外键约束** | 应用层保证一致性，避免 TiDB 分布式场景下的外键性能损耗 |
+| **VARCHAR(64) 主键** | 使用生成 ID，比自增 ID 更适合分布式 |
+| **user_settings 键值对** | 灵活扩展，无需改表结构即可新增配置项 |
 
 ---
 
-## 五、后端开发规范
+## 五、认证系统设计
 
-### 5.1 路由设计（RESTful）
-
-```
-GET    /api/content          # 内容列表
-GET    /api/content/:id      # 内容详情
-POST   /api/content          # 保存内容
-PUT    /api/content/:id      # 更新内容
-DELETE /api/content/:id      # 删除内容
-
-GET    /api/prompt/templates        # 模板列表
-POST   /api/prompt/templates        # 创建模板
-PUT    /api/prompt/templates/:id    # 更新模板（自动生成新版本）
-DELETE /api/prompt/templates/:id    # 删除模板
-
-GET    /api/prompt/versions/:promptId   # 某模板的所有版本
-
-POST   /api/generate          # 触发 AI 生成
-```
-
-### 5.2 分层约束
+### 5.1 认证流程
 
 ```
-routes/ → 只做参数校验 + 调用 db/repositories/
-db/repositories/ → 只做 CRUD，不包含业务逻辑
+注册
+  POST /api/auth/register
+    ├─ 校验 username/email 唯一性
+    ├─ bcryptjs 哈希密码
+    ├─ 创建用户（默认 role=user）
+    └─ 返回 JWT token pair
+
+登录
+  POST /api/auth/login
+    ├─ 查用户（username 或 email）
+    ├─ bcryptjs 验证密码
+    ├─ 生成 access token (15min) + refresh token (7d)
+    └─ 返回 token pair
+
+刷新
+  POST /api/auth/refresh
+    ├─ 验证 refresh token
+    └─ 返回新的 access token
+
+获取当前用户
+  GET /api/auth/me
+    └─ 返回用户信息（不含 password_hash）
+```
+
+### 5.2 JWT 中间件行为
+
+- 所有 `/api/*` 路由（除 `/api/auth/login` 和 `/api/auth/register`）必须验证 JWT
+- 验证失败 → HTTP 401 `{ error: { code: "UNAUTHORIZED" } }`
+- 验证成功 → 将 `{ userId, username, role }` 挂到 `req.user`
+- 前端 Store 在每次请求时自动带 `Authorization: Bearer <token>`
+
+### 5.3 前端认证状态
+
+```ts
+// src/stores/auth.ts
+interface AuthState {
+  user: { id: string; username: string; role: string } | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  isAuthenticated: boolean;
+}
+
+// 路由守卫
+router.beforeEach((to, from, next) => {
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    next('/login');
+  } else {
+    next();
+  }
+});
+```
+
+---
+
+## 六、安全规范
+
+| 项 | 措施 | 实现 |
+|---|---|---|
+| 密码存储 | bcryptjs hash，cost=12 | `user-repo.ts` create 时调用 `bcrypt.hash(password, 12)` |
+| SQL 注入 | 全部用参数化查询 | `mysql2` 的 `?` 占位符，禁止拼接 SQL |
+| XSS | 输入转义 + CSP 头 | `helmet()` + 前端 Vue 默认转义 |
+| CORS | 仅允许前端域名 | `cors({ origin: frontendUrl })` |
+| 登录爆破 | Rate Limit | `express-rate-limit` 登录路由 5 次/分钟/IP |
+| Token 泄露 | 短 access token (15min) + refresh 轮换 | JWT `expiresIn: '15m'` |
+| API Key 泄露 | API 返回脱敏，前端只显示 `sk-****...****` | `api-key-store.ts` 脱敏函数 |
+| 请求体过大 | 限制大小 | `express.json({ limit: '10mb' })` |
+| 安全头 | `helmet()` | Express 中间件 |
+
+---
+
+## 七、配置系统
+
+### 7.1 双层配置
+
+```
+配置优先级：界面保存值 > config.json > .env 默认值
+
+.env                ← 启动默认值（DB 连接 / JWT Secret）
+server/config.json  ← 用户通过设置页覆盖（不写死在代码里）
+TiDB user_settings  ← API Key 等用户级业务配置
+```
+
+### 7.2 环境变量
+
+```
+TIDB_HOST=          # TiDB 主机
+TIDB_PORT=4000      # TiDB 端口
+TIDB_USER=          # 用户名
+TIDB_PASSWORD=      # 密码
+TIDB_DATABASE=      # 数据库名
+JWT_SECRET=         # JWT 签名密钥（生产环境必须换强随机值）
+JWT_REFRESH_SECRET= # Refresh Token 签名密钥
+```
+
+### 7.3 数据库配置热切换
+
+1. 用户在前端设置页修改 DB 配置
+2. `POST /api/admin/config/database` → 后端先测试新连接
+3. 成功 → 写 `config.json` → 切换连接池 → 返回成功
+4. 失败 → 不写文件，返回错误信息，连接池保持原样
+
+### 7.4 API Key 存取（闭包缓存）
+
+```ts
+// server/db/api-key-store.ts
+// 利用模块闭包特性：import 后常驻进程，DB 不可用时从内存读
+
+let memoryCache: Record<string, string> | null = null;
+
+export async function getApiKey(userId: string, platform: string): Promise<string | null> {
+  if (memoryCache) return memoryCache[`${userId}:${platform}`] ?? null;
+  const rows = await db.query('SELECT `key`, `value` FROM user_settings WHERE user_id = ?', [userId]);
+  memoryCache = Object.fromEntries(rows.map(r => [`${userId}:${r.key}`, r.value]));
+  return memoryCache[`${userId}:${platform}`] ?? null;
+}
+
+export async function setApiKey(userId: string, platform: string, key: string): Promise<void> {
+  await db.query(
+    'INSERT INTO user_settings (user_id, `key`, `value`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `value` = ?',
+    [userId, `${platform}_api_key`, key, key]
+  );
+  if (!memoryCache) memoryCache = {};
+  memoryCache[`${userId}:${platform}_api_key`] = key;
+}
+```
+
+---
+
+## 八、AdminJS 数据库管理
+
+### 8.1 接入方式
+
+AdminJS 通过 `@adminjs/express` 插件接入 Express，挂在 `/admin` 路径。
+
+```ts
+// server/admin/index.ts
+import AdminJS from 'adminjs';
+import AdminJSExpress from '@adminjs/express';
+import { Database, Resource } from '@adminjs/typeorm';
+
+AdminJS.registerAdapter({ Database, Resource });
+
+const admin = new AdminJS({
+  databases: [dbConnection],
+  rootPath: '/admin',
+  loginPath: '/admin/login',
+});
+
+// 仅 admin 角色可访问
+const adminRouter = AdminJSExpress.buildAuthenticatedRouter(admin, {
+  authenticate: async (email, password) => {
+    const user = await userRepo.findByEmail(email);
+    if (user && user.role === 'admin' && await bcrypt.compare(password, user.password_hash)) {
+      return user;
+    }
+    return null;
+  },
+  cookiePassword: process.env.ADMIN_COOKIE_SECRET,
+});
+
+app.use(admin.options.rootPath, adminRouter);
+```
+
+### 8.2 AdminJS 能力
+
+- ✅ 自动展示所有表结构（字段、类型、注释）
+- ✅ 记录 CRUD（浏览 / 新增 / 编辑 / 删除）
+- ✅ 行数统计、分页、排序
+- ✅ 搜索过滤
+- ✅ 导出 CSV / JSON
+- ✅ 仅 `role=admin` 的用户可访问
+
+### 8.3 设置页与 AdminJS 的分工
+
+| 功能 | 实现 |
+|---|---|
+| 数据库连接配置 + 测试连接 | 手写 Vue 表单 → Hono API（替换为 Express 路由同名路径） |
+| 表结构浏览 + 记录管理 | **AdminJS** 自动生成（零前端代码） |
+| API Key 管理 | 手写 Vue 表单 → 存 `user_settings` 表 + 闭包内存缓存 |
+
+---
+
+## 九、后端开发规范
+
+### 9.1 路由设计（RESTful）
+
+```
+# 认证
+POST   /api/auth/register     # 注册
+POST   /api/auth/login        # 登录
+POST   /api/auth/refresh      # 刷新 token
+GET    /api/auth/me            # 获取当前用户
+
+# 内容（需认证）
+GET    /api/content            # 内容列表（当前用户）
+GET    /api/content/:id        # 内容详情
+POST   /api/content            # 保存内容
+PUT    /api/content/:id        # 更新内容
+DELETE /api/content/:id        # 删除内容
+
+# Prompt（需认证）
+GET    /api/prompt/templates           # 模板列表
+POST   /api/prompt/templates           # 创建模板
+PUT    /api/prompt/templates/:id       # 更新（自动生成新版本）
+DELETE /api/prompt/templates/:id       # 删除
+GET    /api/prompt/versions/:promptId  # 版本列表
+
+# AI 生成（需认证）
+POST   /api/generate           # 触发 AI 生成
+
+# 系统管理（需认证，仅 admin）
+GET    /api/admin/config/database      # 获取当前 DB 配置（密码脱敏）
+POST   /api/admin/config/database      # 更新 DB 配置 + 重连
+GET    /api/admin/config/schema        # 获取表结构信息
+POST   /api/admin/config/init-tables   # 一键建表
+GET    /api/admin/config/api-keys      # 获取 API Key（脱敏）
+POST   /api/admin/config/api-keys      # 批量保存 API Key
+GET    /api/admin/status               # DB 连接状态 + 各表状态
+
+# AdminJS（仅 admin）
+/admin                                 # AdminJS 数据库管理面板
+```
+
+### 9.2 分层约束
+
+```
+routes/         → 参数校验 + 调用 repository
+middleware/     → 跨横切关注点（认证 / 限流 / CORS）
+admin/          → AdminJS 配置
+db/repositories/ → CRUD，不包含业务逻辑
+db/client.ts    → 连接池管理
 ```
 
 路由层不得直接写 SQL，必须通过 repository。
+repository 不得包含业务逻辑。
 
-### 5.3 错误处理
+### 9.3 错误处理
 
 ```ts
 interface APIError {
   error: {
-    code: string;       // 与前端 WorkflowError.code 对齐
+    code: string;    // 与前端 WorkflowError.code 对齐
     message: string;
     detail?: unknown;
   };
 }
 ```
 
-所有 API 响应统一格式：
-```json
-// 成功
-{ "data": {...} }
-
-// 失败
-{ "error": { "code": "CONTENT_NOT_FOUND", "message": "内容不存在" } }
-```
-
-### 5.4 环境变量
-
-```
-TIDB_HOST=        # TiDB 主机地址
-TIDB_PORT=4000    # TiDB 端口
-TIDB_USER=        # 数据库用户名
-TIDB_PASSWORD=    # 数据库密码
-TIDB_DATABASE=    # 数据库名
-```
+| HTTP 状态码 | 场景 |
+|---|---|
+| 200 | 成功 |
+| 400 | 参数错误 |
+| 401 | 未认证 / Token 过期 |
+| 403 | 权限不足（非 admin 访问管理接口） |
+| 404 | 资源不存在 |
+| 429 | 请求过多（限流） |
+| 500 | 服务器内部错误 |
 
 ---
 
-## 六、前端适配
+## 十、前端适配
 
-前端现有 `LocalStorageRepository` 保留作为离线缓存。
+### 10.1 数据存取层
 
-调用链路改为：
 ```
-Page → Store → Workflow → 前端 Provider
-                              ↓
-                         fetch() → Hono API → TiDB
-                              ↓
-                         返回 Content DTO
+离线模式：LocalStorageRepository → localStorage
+在线模式：HttpRepository → Express API → TiDB
+降级策略：TiDB 不可用 → 自动切换 LocalStorageRepository → UI 显示「离线模式」
 ```
 
-`src/repositories/` 新增 `HttpRepository<T>` 实现，走 HTTP 调用后端 API。
+### 10.2 前端新增模块
+
+| 文件 | 职责 |
+|---|---|
+| `src/stores/auth.ts` | 认证状态（登录/注册/Token 刷新/路由守卫） |
+| `src/pages/SettingsPage.vue` | 设置页（DB 配置 / API Key / 表状态） |
+| `src/pages/LoginPage.vue` | 登录注册页 |
+| `src/repositories/http-repository.ts` | `HttpRepository<T>` 实现 |
+| `src/utils/api-client.ts` | fetch 封装（自动附加 Authorization 头，401 时尝试刷新 Token） |
+
+### 10.3 离线降级
 
 ```ts
-class HttpRepository<T extends { id: string }> implements Repository<T> {
-  constructor(private basePath: string) {}
-  async save(item: T): Promise<void> { /* POST /api/content */ }
-  async get(id: string): Promise<T | null> { /* GET /api/content/:id */ }
-  async list(): Promise<T[]> { /* GET /api/content */ }
-  async delete(id: string): Promise<void> { /* DELETE /api/content/:id */ }
+// src/repositories/index.ts
+import { HttpRepository } from './http-repository';
+import { LocalStorageRepository } from './local-storage-repository';
+
+export function createRepository<T extends { id: string }>(collectionName: string): Repository<T> {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return new HttpRepository<T>(collectionName);
+  }
+  return new LocalStorageRepository<T>(collectionName);
 }
 ```
 
 ---
 
-## 七、决策记录
+## 十一、决策记录
 
 | 日期 | 决策 | 原因 |
 |------|------|------|
-| 2026-07-03 | 后端框架 = Hono | 轻量、TS 原生、与 Vue 搭配简洁 |
+| 2026-07-03 | 后端框架 = Express（从 Hono 调整） | AdminJS 需要 Express、认证/安全生态成熟 |
 | 2026-07-03 | 数据库 = TiDB（MySQL 兼容） | 用户已有账户，成熟稳定 |
 | 2026-07-03 | 复杂结构用 JSON 字段 | TiDB 支持 MySQL JSON，减少关联表 |
-| 2026-07-03 | 不选 Next.js | 前端已是 Vue，Next.js 做纯 API 不合适 |
+| 2026-07-03 | 加入用户系统（users 表） | 数据库管理需要权限控制 |
+| 2026-07-03 | 认证 = JWT + bcryptjs | 无状态、适合 SPA、Express 生态 |
+| 2026-07-03 | 数据库管理 = AdminJS + TypeORM | 自动生成 CRUD 界面，零前端代码 |
+| 2026-07-03 | API Key 闭包缓存 | DB 不可用时从内存读取，兜底保障 |
+| 2026-07-03 | 双层配置（.env + config.json） | 数据库配置不在代码中写死 |
+| 2026-07-03 | 不选 Next.js | 前端已是 Vue |
 | 2026-07-03 | 不选 NestJS | 项目规模不大时过度工程 |

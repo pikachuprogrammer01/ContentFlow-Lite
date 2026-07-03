@@ -25,7 +25,10 @@ PRD 用于描述产品需要实现哪些功能，而本规范用于定义这些�
 - Content DTO（统一内容模型）
 - Editor（编辑器）
 - Exporter（导出模块）
-- Storage（数据存储）
+- Storage / Repository（数据存储）
+- Auth Module（认证模块）
+- AdminJS Panel（数据库管理面板）
+- Express API Layer（后端 API 层）
 
 未来新增的任何模块，也必须遵循本规范定义的架构原则。
 
@@ -106,7 +109,15 @@ Workflow Engine 是整个系统唯一的业务入口。
                          用户
                           │
                           ▼
-                     页面（UI）
+            ┌──────── 页面（UI）─────────┐
+            │    (Vue 3 + Pinia + Router) │
+            │    LoginPage / SettingsPage │
+            └─────────────┬───────────────┘
+                          │
+                          ▼
+              ┌── Express API Layer ──┐
+              │  JWT Auth Middleware  │
+              └───────────┬───────────┘
                           │
                           ▼
                  Workflow Engine
@@ -114,7 +125,7 @@ Workflow Engine 是整个系统唯一的业务入口。
         ┌─────────────────┼─────────────────┐
         ▼                 ▼                 ▼
  Prompt Builder      AI Provider       Storage
-        │                 │
+        │                 │            (TiDB + localStorage)
         └─────────┬───────┘
                   ▼
              AI 原始返回内容
@@ -128,16 +139,23 @@ Workflow Engine 是整个系统唯一的业务入口。
       ┌───────────┼────────────┐
       ▼           ▼            ▼
     Editor     Preview     Exporter
+                  │
+                  ▼
+          ┌── AdminJS ──┐
+          │  (仅 admin)  │
+          └──────────────┘
 ```
 
 整个过程中：
 
-- 页面层只负责交互。
+- 页面层只负责交互与展示。
+- Express API 层负责认证与路由分发。
 - Workflow 负责流程调度。
 - Parser 负责数据转换。
 - DTO 负责数据传递。
 - Exporter 负责导出。
-- Storage 负责持久化。
+- Storage / TiDB 负责持久化。
+- AdminJS 负责数据库可视化管理。
 
 所有模块均采用单向依赖，禁止跨层调用。
 
@@ -145,7 +163,7 @@ Workflow Engine 是整个系统唯一的业务入口。
 
 ## 2.1 系统分层
 
-整个系统划分为五层。
+整个系统划分为六层。
 
 ### 页面层（Presentation Layer）
 
@@ -164,6 +182,28 @@ Workflow Engine 是整个系统唯一的业务入口。
 - 操作浏览器存储
 
 页面层只负责展示数据，不承担业务逻辑。
+
+***
+
+### Express API 层（API Layer）
+
+Express 后端是整个系统唯一的外部接口层。
+
+负责：
+
+- JWT 认证与授权
+- API 路由分发
+- 请求参数校验
+- 响应格式化
+- CORS / Rate Limit / Helmet 安全中间件
+- AdminJS 数据库管理面板挂载
+
+不得：
+
+- 包含业务逻辑
+- 直接写 SQL（必须通过 Repository）
+- 调用 AI Provider
+- 拼接 Prompt
 
 ***
 
@@ -223,10 +263,11 @@ Workflow 不负责：
 
 包括：
 
-- Storage
+- Storage（TiDB + localStorage 双模）
 - Exporter
+- AdminJS Panel（数据库管理）
 - Logger
-- Config
+- Config（.env + config.json + user_settings 三层）
 
 基础设施层不得包含任何业务逻辑。
 
