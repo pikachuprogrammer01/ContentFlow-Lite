@@ -564,7 +564,7 @@ Workflow 是 ContentFlow Lite 的核心控制器。
 | Gemini 2.0 Flash | 1,048,576 | 838,860 |
 | DeepSeek V4 Flash | 131,072 | 104,857 |
 
-token 估算公式：中英文混合 ≈ `字符数 / 2`。不引入 tokenizer 库。
+token 估算使用 `tiktoken` 库精确计算，避免字符数/2 在中文场景误差过大。
 
 token 估算公式（保守）：中英文混合 ≈ `字符数 / 2`。
 
