@@ -173,6 +173,25 @@ rules/backend.mdc（API 文档方案）
 
 ---
 
+## 10. Phase Gate / 推进流程类任务
+
+读取：
+
+**docs/PHASE_GATE.md**（完整介绍）
+scripts/phase-gate.sh（实现逻辑）
+PROGRESS.md（当前任务状态）
+
+关注内容：
+
+- 当前 Phase 编号（`.phase` 文件）
+- `pnpm phase:status` — 查状态
+- `pnpm phase:advance` — 唯一推进入口
+- 客户端的 pre-commit/pre-push hooks 会触发检查
+- 禁止手动改 .phase、禁止 git push --no-verify 绕过
+- 每完成一个 Milestone 更新 PROGRESS.md
+
+---
+
 # 四、系统执行链路（抽象级）
 
 ```text
