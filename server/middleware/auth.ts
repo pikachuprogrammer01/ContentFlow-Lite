@@ -15,7 +15,7 @@ declare global {
     interface Request {
       user?: {
         userId: string;
-        role: 'admin' | 'user';
+        role: 'super_admin' | 'admin' | 'user';
       };
     }
   }
@@ -41,7 +41,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   try {
     const payload = jwt.verify(token, config.jwt.secret) as {
       userId: string;
-      role: 'admin' | 'user';
+      role: 'super_admin' | 'admin' | 'user';
     };
     req.user = payload;
     next();
@@ -58,7 +58,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
  * 仅允许 role=admin 通过。
  */
 export function adminGuard(req: Request, res: Response, next: NextFunction): void {
-  if (!req.user || req.user.role !== 'admin') {
+  if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'super_admin')) {
     res.status(403).json({
       error: { code: 'FORBIDDEN', message: '需要管理员权限' },
     });

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 /**
- * AdminPage — 管理员用户管理
+ * AdminPage — 用户管理（管理员/超级管理员）
  *
- * 管理员可查看、编辑、删除用户，重置用户密码。
+ * - 超级管理员：可管理所有用户（含 admin），可设置角色，不可被删除
+ * - 管理员：只能管理普通用户，不能管理 admin/super_admin
  */
 
-import { ref, onMounted, h } from 'vue';
+import { ref, onMounted, h, computed } from 'vue';
 import {
   NCard,
   NDataTable,
@@ -19,9 +20,12 @@ import {
 } from 'naive-ui';
 import type { DataTableColumn } from 'naive-ui';
 import { api } from '@/utils/api-client';
+import { useAuthStore } from '@/stores/auth';
 import DefaultLayout from '@/layouts/DefaultLayout.vue';
 
 const message = useMessage();
+const auth = useAuthStore();
+const isSuperAdmin = computed(() => auth.user?.role === 'super_admin');
 
 // ── 用户列表 ──────────────────────────────────────────
 
@@ -37,7 +41,32 @@ const users = ref<AdminUser[]>([]);
 const loading = ref(false);
 
 function roleLabel(role: string): string {
-  return role === 'admin' ? '管理员' : '普通用户';
+  const map: Record<string, string> = {
+    super_admin: '超级管理员',
+    admin: '管理员',
+    user: '普通用户',
+  };
+  return map[role] || role;
+}
+
+function roleColor(role: string): string {
+  if (role === 'super_admin') return 'color: #dc2626; font-weight: 700';
+  if (role === 'admin') return 'color: #3b82f6; font-weight: 600';
+  return '';
+}
+
+function canEdit(row: AdminUser): boolean {
+  if (isSuperAdmin.value) return true;
+  // admin 只能编辑普通用户
+  return row.role === 'user';
+}
+
+function canDelete(row: AdminUser): boolean {
+  // 超级管理员不可删除
+  if (row.role === 'super_admin') return false;
+  // 只有超级管理员能删 admin
+  if (row.role === 'admin' && !isSuperAdmin.value) return false;
+  return true;
 }
 
 const columns: DataTableColumn<AdminUser>[] = [
@@ -47,11 +76,7 @@ const columns: DataTableColumn<AdminUser>[] = [
     title: '角色',
     key: 'role',
     render: (row) =>
-      h(
-        'span',
-        { style: row.role === 'admin' ? 'color: #3b82f6; font-weight: 600' : '' },
-        roleLabel(row.role),
-      ),
+      h('span', { style: roleColor(row.role) }, roleLabel(row.role)),
   },
   {
     title: '注册时间',
@@ -66,15 +91,15 @@ const columns: DataTableColumn<AdminUser>[] = [
       h('div', { style: 'display: flex; gap: 8px' }, [
         h(
           NButton,
-          { size: 'tiny', onClick: () => startEdit(row) },
+          { size: 'tiny', disabled: !canEdit(row), onClick: () => startEdit(row) },
           { default: () => '编辑' },
         ),
         h(
           NButton,
-          { size: 'tiny', onClick: () => openResetPwd(row) },
+          { size: 'tiny', disabled: !canEdit(row), onClick: () => openResetPwd(row) },
           { default: () => '重置密码' },
         ),
-        row.role !== 'admin'
+        canDelete(row)
           ? h(
               NPopconfirm,
               { onPositiveClick: () => handleDelete(row.id) },
@@ -109,6 +134,17 @@ const editUsername = ref('');
 const editEmail = ref('');
 const editRole = ref('user');
 
+const roleOptions = computed(() => {
+  if (isSuperAdmin.value) {
+    return [
+      { label: '普通用户', value: 'user' },
+      { label: '管理员', value: 'admin' },
+      { label: '超级管理员', value: 'super_admin' },
+    ];
+  }
+  return [{ label: '普通用户', value: 'user' }];
+});
+
 function startEdit(user: AdminUser): void {
   editingUser.value = user;
   editUsername.value = user.username;
@@ -120,11 +156,12 @@ function startEdit(user: AdminUser): void {
 async function saveEdit(): Promise<void> {
   if (!editingUser.value) return;
   try {
-    await api.put(`/api/admin/users/${editingUser.value.id}`, {
+    const body: Record<string, string> = {
       username: editUsername.value,
       email: editEmail.value,
-      role: editRole.value,
-    });
+    };
+    if (isSuperAdmin.value) body.role = editRole.value;
+    await api.put(`/api/admin/users/${editingUser.value.id}`, body);
     message.success('已更新');
     showEditModal.value = false;
     loadUsers();
@@ -197,11 +234,9 @@ onMounted(loadUsers);
           <NInput v-model:value="editUsername" placeholder="用户名" />
           <NInput v-model:value="editEmail" placeholder="邮箱" />
           <NSelect
+            v-if="isSuperAdmin"
             v-model:value="editRole"
-            :options="[
-              { label: '普通用户', value: 'user' },
-              { label: '管理员', value: 'admin' },
-            ]"
+            :options="roleOptions"
           />
         </NSpace>
         <NSpace justify="end" style="margin-top: 16px">

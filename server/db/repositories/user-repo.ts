@@ -52,7 +52,7 @@ export async function create(params: {
   username: string;
   email: string;
   passwordHash: string;
-  role?: 'admin' | 'user';
+  role?: 'super_admin' | 'admin' | 'user';
 }): Promise<void> {
   const pool = getPool();
   await pool.query(

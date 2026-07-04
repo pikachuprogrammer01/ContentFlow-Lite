@@ -191,7 +191,7 @@ export interface AuthRequest {
 
 export interface TokenPayload {
   userId: string;
-  role: 'admin' | 'user';
+  role: 'super_admin' | 'admin' | 'user';
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -203,7 +203,7 @@ export interface UserRow {
   username: string;
   email: string;
   password_hash: string;
-  role: 'admin' | 'user';
+  role: 'super_admin' | 'admin' | 'user';
   created_at: string;
   updated_at: string;
 }

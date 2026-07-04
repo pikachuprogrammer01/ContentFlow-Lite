@@ -15,7 +15,7 @@ export const TABLE_SCHEMAS: { name: string; sql: string }[] = [
         username      VARCHAR(100)  NOT NULL UNIQUE COMMENT '用户名',
         email         VARCHAR(200)  NOT NULL UNIQUE COMMENT '邮箱',
         password_hash VARCHAR(255)  NOT NULL COMMENT 'bcrypt 哈希',
-        role          ENUM('admin','user') NOT NULL DEFAULT 'user' COMMENT '角色权限',
+        role          ENUM('super_admin','admin','user') NOT NULL DEFAULT 'user' COMMENT '角色权限',
         created_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) COMMENT='用户表';

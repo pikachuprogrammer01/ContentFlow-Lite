@@ -71,7 +71,7 @@ router.beforeEach(async (to, _from, next) => {
 
   if (auth.isAuthenticated) {
     // 管理员页面：仅 admin 角色可访问，否则跳首页
-    if (to.meta.admin && auth.user?.role !== 'admin') {
+    if (to.meta.admin && auth.user?.role !== 'admin' && auth.user?.role !== 'super_admin') {
       next({ name: 'home' });
       return;
     }

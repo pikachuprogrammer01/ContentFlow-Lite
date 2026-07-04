@@ -232,7 +232,7 @@ export interface UserInfo {
   id: string;
   username: string;
   email: string;
-  role: 'user' | 'admin';
+  role: 'user' | 'admin' | 'super_admin';
   createdAt?: string;
 }
 
