@@ -2,7 +2,7 @@
 /**
  * 默认布局 — Naive UI 顶部导航 + 内容区 + 用户信息
  */
-import { NLayout, NLayoutHeader, NLayoutContent, NMenu, NSpace, NButton, NText, NTag } from 'naive-ui';
+import { NLayout, NLayoutHeader, NLayoutContent, NMenu, NSpace, NButton, NText, NTag, NAvatar, useDialog } from 'naive-ui';
 import { useRouter, useRoute } from 'vue-router';
 import { computed } from 'vue';
 import type { MenuOption } from 'naive-ui';
@@ -11,6 +11,7 @@ import { useAuthStore } from '@/stores/auth';
 const router = useRouter();
 const route = useRoute();
 const auth = useAuthStore();
+const dialog = useDialog();
 
 const menuOptions: MenuOption[] = [
   { label: '生成', key: 'home' },
@@ -28,8 +29,16 @@ function handleMenuUpdate(key: string): void {
 }
 
 function handleLogout(): void {
-  auth.logout();
-  router.push('/login');
+  dialog.warning({
+    title: '确认退出',
+    content: '退出登录后需要重新输入账号密码。确定要退出吗？',
+    positiveText: '确认退出',
+    negativeText: '取消',
+    onPositiveClick: () => {
+      auth.logout();
+      router.push('/login');
+    },
+  });
 }
 </script>
 
@@ -47,10 +56,11 @@ function handleLogout(): void {
           style="flex: 1"
           @update:value="handleMenuUpdate"
         />
-        <NSpace align="center" v-if="auth.user">
-          <NTag size="small" type="info">{{ auth.user.username }}</NTag>
-          <NButton size="small" text @click="handleLogout">退出</NButton>
-        </NSpace>
+        <div v-if="auth.user" class="user-area">
+          <NAvatar size="small" round>{{ auth.user.username.charAt(0).toUpperCase() }}</NAvatar>
+          <NText class="user-name">{{ auth.user.username }}</NText>
+          <NButton size="tiny" quaternary type="error" @click="handleLogout">退出</NButton>
+        </div>
       </div>
     </NLayoutHeader>
     <NLayoutContent>
@@ -78,6 +88,20 @@ function handleLogout(): void {
 .logo-link {
   text-decoration: none;
   white-space: nowrap;
+}
+
+.user-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: #f5f7fa;
+}
+
+.user-name {
+  font-size: 13px;
+  color: #374151;
 }
 
 .main-content {
