@@ -36,10 +36,8 @@ async function main(): Promise<void> {
     log.warn('数据库表初始化跳过（可能已存在）', { error: String(err) });
   }
 
-  // 3. 确保超级管理员存在（系统唯一，首次启动自动创建）
+  // 3. 确保超级管理员存在（系统唯一，首次启动交互式创建）
   try {
-    const bcrypt = await import('bcryptjs');
-    const { default: cfg } = await import('./config.js');
     const { getPool } = await import('./db/client.js');
     const pool = getPool();
 
@@ -47,20 +45,50 @@ async function main(): Promise<void> {
       "SELECT id FROM users WHERE role = 'super_admin' LIMIT 1",
     );
     if (rows.length === 0) {
-      if (!cfg.admin.superAdmin.password) {
-        log.error('❌ 未设置 SUPER_ADMIN_PASSWORD，无法创建超级管理员');
-      } else {
-        const { randomUUID } = await import('node:crypto');
-        const hash = await bcrypt.hash(cfg.admin.superAdmin.password, 12);
-        const id = randomUUID();
-        await pool.query(
-          'INSERT INTO users (id, username, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
-          [id, cfg.admin.superAdmin.username, cfg.admin.superAdmin.email, hash, 'super_admin'],
+      const { default: cfg } = await import('./config.js');
+      const bcrypt = await import('bcryptjs');
+      const { randomUUID, randomBytes } = await import('node:crypto');
+      const readline = await import('node:readline');
+
+      // 生成随机安全密码（16 位）
+      const randomPassword = randomBytes(12).toString('base64url');
+
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      const answer: string = await new Promise((resolve) => {
+        rl.question(
+          '\n🔐 首次启动 — 创建超级管理员\n' +
+          `   用户名: ${cfg.admin.superAdmin.username}\n` +
+          '   请设置密码（直接回车使用随机密码）: ',
+          (a) => {
+            rl.close();
+            resolve(a.trim() || randomPassword);
+          },
         );
-        log.info('🔐 超级管理员已创建', {
-          username: cfg.admin.superAdmin.username,
-        });
-      }
+      });
+
+      const hash = await bcrypt.hash(answer, 12);
+      const id = randomUUID();
+      await pool.query(
+        'INSERT INTO users (id, username, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
+        [id, cfg.admin.superAdmin.username, cfg.admin.superAdmin.email, hash, 'super_admin'],
+      );
+
+      console.log('');
+      console.log('╔══════════════════════════════════════════════════╗');
+      console.log('║  🔑 超级管理员已创建 — 请务必妥善保管！          ║');
+      console.log('╠══════════════════════════════════════════════════╣');
+      console.log(`║  用户名 : ${cfg.admin.superAdmin.username.padEnd(36)}║`);
+      console.log(`║  密  码 : ${answer.padEnd(36)}║`);
+      console.log('╠══════════════════════════════════════════════════╣');
+      console.log('║  ⚠️  此密码仅显示一次，请立即复制保存！          ║');
+      console.log('╚══════════════════════════════════════════════════╝');
+      console.log('');
+
+      log.info('超级管理员已创建', { username: cfg.admin.superAdmin.username });
     } else {
       log.info('超级管理员已存在，跳过初始化');
     }

@@ -71,7 +71,6 @@ export const config = {
     /** 系统初始化时自动创建的超级管理员（唯一，不可通过注册创建） */
     superAdmin: {
       username: process.env.SUPER_ADMIN_USERNAME || 'superadmin',
-      password: process.env.SUPER_ADMIN_PASSWORD || '',
       email: process.env.SUPER_ADMIN_EMAIL || 'superadmin@contentflow.local',
     },
   },
