@@ -1,0 +1,25 @@
+{
+  "task_id": "20260703-175013-pasted-text-11-32-lines-begin-pasted-text-11-32-lines-6",
+  "goal": "[Pasted text #11 · 32 lines]\n\n--- Begin [Pasted text #11 · 32 lines] ---\n6 workflow runs\rfix: pre-push hook 禁直接推 main\rPhase Gate (Server-Side) #6: Pull request #1 opened by pikachuprogrammer01\rfeat/pre-push-guard\t\r7 minutes ago\r 6s\rtest real hook\rPhase Gate (Server-Side) #5: Commit efde36c pushed by pikachuprogrammer01\rmain\t\r13 minutes ago\r 10s\rdebug test\rPhase Gate (Server-Side) #4: Commit ef33136 pushed by pikachuprogrammer01\rmain\t\r14 minutes ago\r 6s\rtest: 验证直接推main被拦截\rPhase Gate (Server-Side) #3: Commit eb443cd pushed by pikachuprogrammer01\rmain\t\r14 minutes ago\r 9s\rtest: 测试分支保护\rPhase Gate (Server-Side) #2: Commit 6240db0 pushed by pikachuprogrammer01\rmain\t\r19 minutes ago\r 8s\rdocs: PHASE_GATE.md — 完整推进系统文档（面向人 + Agent）\rPhase Gate (Server-Side) #1: Commit 10c827e pushed by pikachuprogrammer01\rmain\t\r41 minutes ago\r 6s\r\n--- End [Pasted text #11 · 32 lines] ---",
+  "scope": null,
+  "non_goals": null,
+  "allowed_operations": {
+    "write": true,
+    "network": false,
+    "publish": false
+  },
+  "success_criteria": [
+    {
+      "id": "objective_evidence",
+      "description": "The goal outcome is supported by direct evidence, such as inspected code, reproduced behavior, source material, or concrete findings.",
+      "required": true,
+      "evidence_ids": null
+    },
+    {
+      "id": "verification",
+      "description": "The result has relevant verification evidence, such as tests, commands, benchmarks, manual checks, or a documented reason why verification is not applicable.",
+      "required": true,
+      "evidence_ids": null
+    }
+  ]
+}

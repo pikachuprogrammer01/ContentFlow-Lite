@@ -337,3 +337,34 @@ Coding Rules 的核心目标是：
 > 保证所有代码围绕 Workflow + DTO + Prompt 三大核心稳定运行
 
 任何违反该规则的代码，都视为架构违规代码，必须重构。
+
+---
+
+## 十九、封装模块使用规范（强制）
+
+所有已封装的系统模块为唯一合法入口，禁止绕过封装直接调用底层依赖。
+
+### 原则：
+
+> 已封装者必须使用，未封装者禁止使用。
+
+### 必须通过封装模块：
+
+| 场景 | 必须使用 | 禁止直接使用 |
+|------|---------|-------------|
+| 数据库操作 | `server/db/client.ts`（连接池） | `mysql2` 直接 createConnection |
+| 日志输出 | `server/utils/logger.ts`（createLogger） | `console.log` / `console.error` |
+| 配置读取 | `server/config.ts`（config 对象） | `process.env` 原始读取 |
+| 数据库建表 | `server/db/schema.ts`（initTables） | 手写 CREATE TABLE 字符串 |
+
+### 禁止：
+
+- 在业务代码中直接 `import mysql2`
+- 在业务代码中直接 `console.log`（必须通过 Logger 模块）
+- 在业务代码中直接读取 `process.env.XXX`（必须通过 config.ts）
+- 使用未被上述封装模块暴露的底层 API
+
+### 新增依赖规则：
+
+- 引入新的第三方库前，必须先在对应封装模块中完成封装
+- 封装模块未就绪时，禁止在业务代码中直接使用该第三方库

@@ -1,6 +1,6 @@
 # ContentFlow Lite — 实现进度追踪
 
-> 最后更新：2026-07-03
+> 最后更新：2026-07-04
 > 基于 `docs/PRD.md`、`docs/SPEC.md`、`.rules/` 全部规范
 
 ---
@@ -22,21 +22,23 @@
 |------|------|------|------|
 | **文档体系** | ✅ | `docs/` `.rules/` `CLAUDE.md` | PRD/SPEC/13 个 rules 文件/CLAUDE.md/types.md 全部就绪 |
 | **前端骨架** | 🔵 | `src/` | 初始化代码存在，但基于旧架构（MockProvider/localStorage/6 节点），需整体重构 |
-| **后端** | ❌ | `server/` | 目录结构在文档中已定义，代码零行 |
-| **数据库** | ❌ | — | 8 张表在文档中已定义，SQL 未执行 |
-| **认证系统** | ❌ | — | JWT + bcrypt 方案已定，代码零行 |
-| **AI Provider** | ❌ | — | MockProvider 仅用于旧骨架调试，4 个真实 Provider 未实现 |
-| **Workflow** | 🔵 | `src/workflow/` | 旧版 6 节点前端 Workflow 骨架存在，7 节点后端版本未实现 |
+| **后端** | ✅ | `server/` | Phase 1 已完成：Auth + Workflow + Provider + Repository + API 全部就绪 |
+| **数据库** | ✅ | TiDB Cloud | 8 张表 SQL + 连接池 + 4 个 Repository 已实现，真实 TiDB 云端连接验证通过 |
+| **认证系统** | ✅ | `server/routes/auth.ts` | JWT + bcrypt，注册/登录/刷新/me 4 个端点 |
+| **AI Provider** | 🔵 | `server/providers/` | Mock + Gemini + DeepSeek 已实现（2/4 真实 Provider），硅基流动/通义万相待 Phase 3 |
+| **Workflow** | ✅ | `server/workflow/` | 7 节点后端 Pipeline（Input→Prompt→Provider→Parse→Validate→DTO→Output），含 Validate 失败重试 |
 | **测试** | ❌ | — | Vitest 未安装，无测试用例 |
 
 ### 现状诚实评估
 
-当前 `src/` 下的代码是项目初始化阶段按旧架构（纯前端、localStorage、Mock AI）写的骨架。经过 3 轮需求讨论，架构已彻底变化：
+Phase 0+1 已完成，后端核心链路跑通：
 
-- **旧**：前端独揽一切（Workflow + Provider + Repository 全在前端）
-- **新**：前端 → Express 后端 → MySQL，Workflow/Provider 全在后端
+- ✅ Express 服务启动 + TiDB Cloud 连接
+- ✅ JWT 认证系统（注册/登录/刷新/me）
+- ✅ 7 节点 Workflow Pipeline（含 Mock/Gemini/DeepSeek 三个 Provider）
+- ✅ POST /api/generate → Content DTO 端到端验证通过
 
-**旧骨架代码不可直接用。** 需要在新的 `server/` 目录从零搭建后端，然后逐步重构前端。
+`src/` 下的前端代码仍是旧架构骨架（纯前端、localStorage、Mock AI），不可直接用。Phase 2 将从零重构前端：Naive UI + 后端 API 对接。
 
 ---
 
@@ -62,62 +64,63 @@
 
 ---
 
-### B. 数据库层 ❌
+### B. 数据库层 ✅
 
 | # | 表 | 文档位置 | 代码 | 状态 |
 |---|---|---|---|---|
-| B1 | `users` | backend.mdc §3.1 | — | ❌ |
-| B2 | `contents` | backend.mdc §3.2 | — | ❌ |
-| B3 | `prompt_templates` | backend.mdc §3.3 | — | ❌ |
-| B4 | `prompt_versions` | backend.mdc §3.4 | — | ❌ |
-| B5 | `generation_records` | backend.mdc §3.5 | — | ❌ |
-| B6 | `user_settings` | backend.mdc §3.6 | — | ❌ |
-| B7 | `publish_records` | backend.mdc §3.7 | — | ❌ |
-| B8 | `app_logs` | backend.mdc §3.8 | — | ❌ |
-| — | `server/db/schema.ts` | backend.mdc §二 | — | ❌ |
-| — | `server/db/client.ts` (mysql2) | backend.mdc §二 | — | ❌ |
+| B1 | `users` | backend.mdc §3.1 | `server/db/schema.ts` | ✅ |
+| B2 | `contents` | backend.mdc §3.2 | `server/db/schema.ts` | ✅ |
+| B3 | `prompt_templates` | backend.mdc §3.3 | `server/db/schema.ts` | ✅ |
+| B4 | `prompt_versions` | backend.mdc §3.4 | `server/db/schema.ts` | ✅ |
+| B5 | `generation_records` | backend.mdc §3.5 | `server/db/schema.ts` | ✅ |
+| B6 | `user_settings` | backend.mdc §3.6 | `server/db/schema.ts` | ✅ |
+| B7 | `publish_records` | backend.mdc §3.7 | `server/db/schema.ts` | ✅ |
+| B8 | `app_logs` | backend.mdc §3.8 | `server/db/schema.ts` | ✅ |
+| — | `server/db/schema.ts` | backend.mdc §二 | `server/db/schema.ts` | ✅ 8 张表 CREATE TABLE IF NOT EXISTS |
+| — | `server/db/client.ts` (mysql2) | backend.mdc §二 | `server/db/client.ts` | ✅ mysql2 连接池 + TiDB Cloud SSL |
+| — | `server/db/repositories/*` | backend.mdc §二 | 4 个 repo 文件 | ✅ user/content/prompt/generation CRUD |
 
 ---
 
-### C. 后端 Express API ❌
+### C. 后端 Express API 🔵
 
 | # | 文件 | 路由 | 状态 |
 |---|---|---|---|
-| C1 | `server/index.ts` | 入口 | ❌ |
-| C2 | `server/app.ts` | Express 配置 | ❌ |
-| C3 | `server/routes/auth.ts` | /api/auth/* (5 路由) | ❌ |
-| C4 | `server/routes/content.ts` | /api/content/* (5 路由) | ❌ |
-| C5 | `server/routes/prompt.ts` | /api/prompt/* (5 路由) | ❌ |
-| C6 | `server/routes/generate.ts` | POST /api/generate | ❌ |
-| C7 | `server/routes/admin-config.ts` | /api/admin/config/* (6 路由) | ❌ |
-| C8 | `server/middleware/auth.ts` | JWT 验证 | ❌ |
-| C9 | `server/middleware/admin-guard.ts` | role=admin | ❌ |
-| C10 | `server/middleware/rate-limit.ts` | 限流 | ❌ |
-| C11 | `server/middleware/cors.ts` | CORS | ❌ |
-| C12 | `server/db/repositories/*` | 4 个 repo | ❌ |
-| C13 | `server/db/api-key-store.ts` | AES-256-GCM + Redis | ❌ |
-| C14 | `server/admin/index.ts` | AdminJS 面板 | ❌ |
-| C15 | `server/config.ts` | .env + config.json 合并 | ❌ |
+| C1 | `server/index.ts` | 入口 | ✅ Phase 0 |
+| C2 | `server/app.ts` | Express 配置 | ✅ Phase 0 |
+| C3 | `server/routes/auth.ts` | /api/auth/* (4 路由) | ✅ 注册/登录/me/刷新（重置密码待 Phase 2） |
+| C4 | `server/routes/content.ts` | /api/content/* | ❌ Phase 2 |
+| C5 | `server/routes/prompt.ts` | /api/prompt/* | ❌ Phase 2 |
+| C6 | `server/routes/generate.ts` | POST /api/generate | ✅ 含认证 + 限流 + 存入 DB |
+| C7 | `server/routes/admin-config.ts` | /api/admin/config/* | ❌ Phase 3 |
+| C8 | `server/middleware/auth.ts` | JWT 验证 | ✅ Bearer Token 守卫 |
+| C9 | `server/middleware/admin-guard.ts` | role=admin | ❌ Phase 3 |
+| C10 | `server/middleware/rate-limit.ts` | 限流 | ✅ 登录 5/min + 生成 10/min |
+| C11 | `server/middleware/cors.ts` | CORS | 🔵 已内联到 app.ts（不需要单独文件） |
+| C12 | `server/db/repositories/*` | 4 个 repo | ✅ user/content/prompt/generation |
+| C13 | `server/db/api-key-store.ts` | AES-256-GCM + Redis | ❌ Phase 3 |
+| C14 | `server/admin/index.ts` | AdminJS 面板 | ❌ Phase 3 |
+| C15 | `server/config.ts` | .env + config.json 合并 | ✅ Phase 0 |
 
 ---
 
-### D. Workflow & Provider ❌
+### D. Workflow & Provider ✅ (Phase 1 出口达标)
 
 | # | 文件 | 规格 | 状态 |
 |---|---|---|---|
-| D1 | `server/workflow/index.ts` | 7 节点 Pipeline 入口 | ❌ |
-| D2 | `server/workflow/nodes/input.ts` | Input Node | ❌ |
-| D3 | `server/workflow/nodes/prompt.ts` | Prompt Node | ❌ |
-| D4 | `server/workflow/nodes/provider.ts` | Provider Node | ❌ |
-| D5 | `server/workflow/nodes/parse.ts` | Parse Node | ❌ |
-| D6 | `server/workflow/nodes/validate.ts` | Validate Node (OutputSchema) | ❌ |
-| D7 | `server/workflow/nodes/dto.ts` | DTO Node | ❌ |
-| D8 | `server/workflow/nodes/output.ts` | Output Node | ❌ |
-| D9 | `server/providers/gemini-provider.ts` | Gemini 2.0 Flash | ❌ |
-| D10 | `server/providers/deepseek-provider.ts` | DeepSeek V4 Flash | ❌ |
-| D11 | `server/providers/siliconflow-provider.ts` | 硅基流动 Qwen2.5-72B | ❌ |
-| D12 | `server/providers/tongyi-provider.ts` | 通义万相 2.0 | ❌ |
-| D13 | `server/providers/mock-provider.ts` | Mock 开发用 | ❌ |
+| D1 | `server/workflow/index.ts` | 7 节点 Pipeline 入口 | ✅ |
+| D2 | `server/workflow/nodes/input.ts` | Input Node | ✅ |
+| D3 | `server/workflow/nodes/prompt.ts` | Prompt Node | ✅ |
+| D4 | `server/workflow/nodes/provider.ts` | Provider Node | ✅ |
+| D5 | `server/workflow/nodes/parse.ts` | Parse Node | ✅ |
+| D6 | `server/workflow/nodes/validate.ts` | Validate Node (OutputSchema) | ✅ |
+| D7 | `server/workflow/nodes/dto.ts` | DTO Node | ✅ |
+| D8 | `server/workflow/nodes/output.ts` | Output Node | ✅ |
+| D9 | `server/providers/gemini-provider.ts` | Gemini 2.0 Flash | ✅ |
+| D10 | `server/providers/deepseek-provider.ts` | DeepSeek V4 Flash | ✅ |
+| D11 | `server/providers/siliconflow-provider.ts` | 硅基流动 Qwen2.5-72B | ❌ Phase 3 |
+| D12 | `server/providers/tongyi-provider.ts` | 通义万相 2.0（图片） | ❌ Phase 3 |
+| D13 | `server/providers/mock-provider.ts` | Mock 开发用 | ✅ |
 
 ---
 
@@ -328,15 +331,74 @@ Phase 4: 测试与发布（E2E + 部署 + 文档收尾）
 
 ---
 
-## 五、当前 Phase：Phase 0 — 基础设施
+## 五、当前 Phase：Phase 2 — 前端重构
 
-**目标**：Express 启动 + MySQL 连接 + 8 张表创建 + Logger 就绪
+**目标**：Naive UI + 认证对接 + 生成流程 + 编辑/导出
+
+### Phase 0 回顾（✅ 已完成）
 
 | # | 任务 | 状态 | 备注 |
 |---|---|---|---|
-| 0.1 | 初始化 `server/` 目录结构 | ❌ | |
-| 0.2 | `server/db/client.ts` | ❌ | |
-| 0.3 | `server/db/schema.ts` | ❌ | |
-| 0.4 | `server/app.ts` | ❌ | |
-| 0.5 | `.env` 模板 + `server/config.ts` | ❌ | |
-| 0.6 | `server/utils/logger.ts` | ❌ | |
+| 0.1 | 初始化 `server/` 目录结构 | ✅ | package.json / tsconfig.json 就位，依赖已安装 |
+| 0.2 | `server/db/client.ts` | ✅ | mysql2 连接池 + TiDB Cloud SSL |
+| 0.3 | `server/db/schema.ts` | ✅ | 8 张表 CREATE TABLE IF NOT EXISTS |
+| 0.4 | `server/app.ts` + `server/index.ts` | ✅ | Express + helmet + cors + GET /health |
+| 0.5 | `.env` 模板 + `server/config.ts` | ✅ | env.ts 显式路径 + 双层配置合并 |
+| 0.6 | `server/utils/logger.ts` | ✅ | winston + createLogger |
+| — | `server/db/check.ts` | ✅ | 独立 DB 连接测试脚本（供 phase gate 使用） |
+| — | `server/env.ts` | ✅ | dotenv 显式路径加载，解决 ESM import hoisting |
+
+**出口标准**：✅ Express 监听端口 + `GET /health` 返回 `{ status: 'ok', db: 'connected' }`
+
+### Phase 1 回顾（✅ 已完成，21/21 通过）
+
+| # | 任务 | 状态 | 备注 |
+|---|---|---|---|
+| 1.1 | JWT 认证系统 | ✅ | `routes/auth.ts` — 注册/登录/me/刷新 四个端点 |
+| 1.2 | 认证中间件 | ✅ | `middleware/auth.ts` — Bearer Token 守卫 |
+| 1.3 | 限流中间件 | ✅ | `middleware/rate-limit.ts` — 登录 5/min/IP + 生成 10/min/用户 |
+| 1.4 | User Repository | ✅ | `db/repositories/user-repo.ts` |
+| 1.5 | Content Repository | ✅ | `db/repositories/content-repo.ts` |
+| 1.6 | Prompt Repository | ✅ | `db/repositories/prompt-repo.ts` |
+| 1.7 | Generation Repository | ✅ | `db/repositories/generation-repo.ts` |
+| 1.8 | Provider 注册中心 | ✅ | `providers/index.ts` — registerProvider/getProvider/listProviders |
+| 1.9 | Mock Provider | ✅ | `providers/mock-provider.ts` — 开发用假数据 |
+| 1.10 | Gemini Provider | ✅ | `providers/gemini-provider.ts` — @google/genai SDK |
+| 1.11 | DeepSeek Provider | ✅ | `providers/deepseek-provider.ts` — OpenAI 兼容 |
+| 1.12 | Workflow 7 节点 | ✅ | input/prompt/provider/parse/validate/dto/output |
+| 1.13 | Workflow 引擎 | ✅ | `workflow/index.ts` — 含 Validate 失败 3 次重试 |
+| 1.14 | Generate 路由 | ✅ | `routes/generate.ts` — POST /api/generate + 认证 + 限流 + 存入 DB |
+| 1.15 | 类型定义 | ✅ | `server/types.ts` — WorkflowContext/Content/AIProvider 等全部类型 |
+
+**出口标准**：✅ `POST /api/generate { "topic":"test", "platform":"xiaohongshu", "provider":"mock" }` → 200 + Content DTO
+
+### Phase 1 延期项（已明确分配后续 Phase）
+
+| 文件 | 目标 Phase | 原因 |
+|------|----------|------|
+| `routes/content.ts` | Phase 2 | 前端编辑页 CRUD 需要 |
+| `routes/prompt.ts` | Phase 2 | Prompt 管理页需要 |
+| `routes/admin-config.ts` | Phase 3 | Settings + AdminJS |
+| `middleware/admin-guard.ts` | Phase 3 | Admin 面板需要 |
+| `db/api-key-store.ts` | Phase 3 | API Key 加密存储 |
+| `admin/index.ts` | Phase 3 | AdminJS 面板 |
+| `siliconflow-provider.ts` | Phase 3 | 低优先级 Provider |
+| `tongyi-provider.ts` | Phase 3 | 图片生成（配图功能） |
+
+### Phase 2 任务清单
+
+| # | 任务 | 产出 | 验证 |
+|---|---|---|---|
+| 2.1 | Naive UI 安装 + 集成 | `pnpm add naive-ui`，全局注册 | import 成功 |
+| 2.2 | `src/utils/api-client.ts` | fetch 封装（Authorization 头/401 刷新） | token 自动携带 |
+| 2.3 | `src/stores/auth.ts` | JWT 管理 + 路由守卫 | 未登录 → 跳转 /login |
+| 2.4 | `src/repositories/http-repository.ts` | HttpRepository<T> 实现 | 对接后端 REST |
+| 2.5 | LoginPage | 登录/注册表单 | 注册 → 登录 → 进首页 |
+| 2.6 | HomePage | 主题输入 + 平台/Provider 选择 + 生成 | 输入主题 → loading → 结果 |
+| 2.7 | EditPage | 编辑 + 导出（Markdown/JSON）+ 下载 | 编辑 → 导出 → 下载文件 |
+| 2.8 | `routes/content.ts` | 后端 /api/content/* CRUD | curl 全路由测试 |
+| 2.9 | `routes/prompt.ts` | 后端 /api/prompt/* CRUD | curl 全路由测试 |
+| 2.10 | PromptPage | 模板 CRUD + 版本列表 | 新建 → 编辑 → V2 |
+| 2.11 | HistoryPage | 历史列表 + 分页 | 列表渲染 + 点击查看 |
+
+**出口标准**：浏览器全流程走通（注册 → 登录 → 生成 → 编辑 → 导出）

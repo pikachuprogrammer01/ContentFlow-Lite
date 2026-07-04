@@ -59,10 +59,7 @@ run_phase_0_checks() {
 
     # 0.6 DB（仅配了才检查）
     if grep -q "^DB_HOST=" "$PROJECT_ROOT/.env" 2>/dev/null; then
-        check "DB 连接成功"               bash -c "node -e '
-            const{createPool}=eval(\"require\")(\"'$PROJECT_ROOT/server/dist/db/client.js'\");
-            createPool().query(\"SELECT 1\").then(()=>process.exit(0)).catch(()=>process.exit(1));
-        '" 2>/dev/null
+        check "DB 连接成功"               "$PROJECT_ROOT/server/node_modules/.bin/tsx" "$PROJECT_ROOT/server/db/check.ts"
     fi
 
     echo -e "\n$results"
@@ -110,14 +107,43 @@ run_phase_1_checks() {
 
     # curl 冒烟（服务运行时有效）
     if curl -s http://localhost:3001/health > /dev/null 2>&1; then
-        total=$((total + 1))
-        if curl -s -X POST http://localhost:3001/api/generate \
+        local TEST_USER="phase_gate_test"
+        local TEST_PASS="GateTest123!"
+        local TEST_EMAIL="gate@test.local"
+        local BASE="http://localhost:3001"
+
+        # 先尝试登录
+        local TOKEN=$(curl -s -X POST "$BASE/api/auth/login" \
             -H 'Content-Type: application/json' \
-            -d '{"topic":"test","platform":"xiaohongshu","provider":"mock"}' \
-            -w '%{http_code}' -o /dev/null 2>/dev/null | grep -q 200; then
-            pass=$((pass + 1)); results+="  ✅ POST /api/generate 返回 200"$'\n'
+            -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PASS\"}" \
+            2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('accessToken',''))" 2>/dev/null)
+
+        # 登录失败则注册并重新登录
+        if [[ -z "$TOKEN" ]]; then
+            curl -s -X POST "$BASE/api/auth/register" \
+                -H 'Content-Type: application/json' \
+                -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PASS\",\"email\":\"$TEST_EMAIL\"}" \
+                > /dev/null 2>&1
+
+            TOKEN=$(curl -s -X POST "$BASE/api/auth/login" \
+                -H 'Content-Type: application/json' \
+                -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PASS\"}" \
+                2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('accessToken',''))" 2>/dev/null)
+        fi
+
+        total=$((total + 1))
+        if [[ -n "$TOKEN" ]]; then
+            if curl -s -X POST "$BASE/api/generate" \
+                -H 'Content-Type: application/json' \
+                -H "Authorization: Bearer $TOKEN" \
+                -d '{"topic":"test","platform":"xiaohongshu","provider":"mock"}' \
+                -w '%{http_code}' -o /dev/null 2>/dev/null | grep -q 200; then
+                pass=$((pass + 1)); results+="  ✅ POST /api/generate 返回 200"$'\n'
+            else
+                results+="  ❌ POST /api/generate 返回 200"$'\n'
+            fi
         else
-            results+="  ❌ POST /api/generate 返回 200"$'\n'
+            results+="  ❌ POST /api/generate 返回 200（无法获取 token）"$'\n'
         fi
     fi
 

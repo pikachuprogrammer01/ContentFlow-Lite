@@ -1,0 +1,23 @@
+[
+  {
+    "fingerprint": "task",
+    "summary": "**好了，已经通过了。**",
+    "first_seen_iteration": 1,
+    "last_seen_iteration": 1,
+    "count": 1
+  },
+  {
+    "fingerprint": "vercel-ui",
+    "summary": "**原因：Vercel 拖慢了 UI。**",
+    "first_seen_iteration": 2,
+    "last_seen_iteration": 2,
+    "count": 1
+  },
+  {
+    "fingerprint": "pr-1",
+    "summary": "✅ PR #1 — 已关闭、已合并。",
+    "first_seen_iteration": 3,
+    "last_seen_iteration": 3,
+    "count": 1
+  }
+]
