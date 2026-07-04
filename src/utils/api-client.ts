@@ -7,14 +7,16 @@
  * - JSON 请求/响应
  */
 
+import { storage } from './storage';
+
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 function getToken(): string | null {
-  return localStorage.getItem('accessToken');
+  return storage.get('accessToken');
 }
 
 function redirectToLogin(): void {
-  localStorage.removeItem('accessToken');
+  storage.remove('accessToken');
   // 使用 location 跳转，因为不在 Vue 组件上下文中
   if (window.location.pathname !== '/login') {
     window.location.href = '/login';
@@ -77,7 +79,10 @@ async function request<T = unknown>(
     );
   }
 
-  return json.data as T;
+  // 兼容两种后端响应格式：
+  // - 带 data 包裹: { data: {...} } → 取 data 层
+  // - 不带包裹:    { user: ..., accessToken: ... } → 直接返回
+  return (json.data ?? json) as unknown as T;
 }
 
 // ── 快捷方法 ────────────────────────────────────────────

@@ -2,7 +2,7 @@
  * src/stores/auth.ts — 认证状态管理
  *
  * 职责：
- * - JWT Token 管理（localStorage 持久化）
+ * - JWT Token 管理（通过 storage 封装持久化）
  * - 登录 / 注册 / 登出
  * - 启动时恢复用户信息（GET /api/auth/me）
  *
@@ -12,11 +12,12 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { api } from '@/utils/api-client';
+import { storage } from '@/utils/storage';
 import type { UserInfo } from '@/types';
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<UserInfo | null>(null);
-  const token = ref<string | null>(localStorage.getItem('accessToken'));
+  const token = ref<string | null>(storage.get('accessToken'));
   const loading = ref(false);
 
   const isAuthenticated = computed(() => !!token.value && !!user.value);
@@ -31,7 +32,7 @@ export const useAuthStore = defineStore('auth', () => {
     );
     token.value = res.accessToken;
     user.value = res.user;
-    localStorage.setItem('accessToken', res.accessToken);
+    storage.set('accessToken', res.accessToken);
   }
 
   /**
@@ -48,7 +49,7 @@ export const useAuthStore = defineStore('auth', () => {
     );
     token.value = res.accessToken;
     user.value = res.user;
-    localStorage.setItem('accessToken', res.accessToken);
+    storage.set('accessToken', res.accessToken);
   }
 
   /**
@@ -75,7 +76,7 @@ export const useAuthStore = defineStore('auth', () => {
   function logout(): void {
     token.value = null;
     user.value = null;
-    localStorage.removeItem('accessToken');
+    storage.remove('accessToken');
   }
 
   return {
