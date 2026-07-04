@@ -26,9 +26,9 @@ interface ConfigJSON {
   };
 }
 
-/** 从项目根目录加载 config.json（若存在） */
+/** 从 server 自身目录加载 config.json（若存在） */
 function loadConfigJSON(): ConfigJSON {
-  const configPath = resolve(__dirname, '..', 'config.json');
+  const configPath = resolve(__dirname, 'config.json');
   if (existsSync(configPath)) {
     try {
       const raw = readFileSync(configPath, 'utf-8');

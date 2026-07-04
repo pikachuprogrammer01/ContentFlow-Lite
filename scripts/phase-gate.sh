@@ -52,14 +52,14 @@ run_phase_0_checks() {
     check ".env.example 存在"             test -f "$PROJECT_ROOT/.env.example"
 
     # 0.4 依赖
-    check "server/node_modules 存在"      test -d "$PROJECT_ROOT/server/node_modules"
+    check "node_modules 存在"             test -d "$PROJECT_ROOT/node_modules"
 
     # 0.5 编译
     check "server tsc --noEmit"           bash -c "cd '$PROJECT_ROOT/server' 2>/dev/null && npx tsc --noEmit > /dev/null 2>&1" || true
 
     # 0.6 DB（仅配了才检查）
     if grep -q "^DB_HOST=" "$PROJECT_ROOT/.env" 2>/dev/null; then
-        check "DB 连接成功"               "$PROJECT_ROOT/server/node_modules/.bin/tsx" "$PROJECT_ROOT/server/db/check.ts"
+        check "DB 连接成功"               "$PROJECT_ROOT/node_modules/.bin/tsx" "$PROJECT_ROOT/server/db/check.ts"
     fi
 
     echo -e "\n$results"
@@ -166,31 +166,31 @@ run_phase_2_checks() {
     }
 
     # 2.1 Naive UI 集成
-    check "naive-ui 在 package.json 中"     grep -q '"naive-ui"' "$PROJECT_ROOT/package.json"
-    check "naive-ui 已安装 (node_modules)"   test -d "$PROJECT_ROOT/node_modules/naive-ui"
+    check "naive-ui 在 package.json 中"     grep -q '"naive-ui"' "$PROJECT_ROOT/client/package.json"
+    check "naive-ui 已安装 (node_modules)"   test -d "$PROJECT_ROOT/client/node_modules/naive-ui"
 
     # 2.2 前端基础设施
-    check "src/utils/api-client.ts"           test -f "$PROJECT_ROOT/src/utils/api-client.ts"
-    check "src/stores/auth.ts"                test -f "$PROJECT_ROOT/src/stores/auth.ts"
-    check "src/repositories/http-repository.ts"   test -f "$PROJECT_ROOT/src/repositories/http-repository.ts"
+    check "src/utils/api-client.ts"           test -f "$PROJECT_ROOT/client/src/utils/api-client.ts"
+    check "src/stores/auth.ts"                test -f "$PROJECT_ROOT/client/src/stores/auth.ts"
+    check "src/repositories/http-repository.ts"   test -f "$PROJECT_ROOT/client/src/repositories/http-repository.ts"
 
     # 2.3 前端页面（全部 5 个页面就位）
-    check "src/pages/LoginPage.vue"           test -f "$PROJECT_ROOT/src/pages/LoginPage.vue"
-    check "src/pages/HomePage.vue"            test -f "$PROJECT_ROOT/src/pages/HomePage.vue"
-    check "src/pages/EditPage.vue"            test -f "$PROJECT_ROOT/src/pages/EditPage.vue"
-    check "src/pages/PromptPage.vue"          test -f "$PROJECT_ROOT/src/pages/PromptPage.vue"
-    check "src/pages/HistoryPage.vue"         test -f "$PROJECT_ROOT/src/pages/HistoryPage.vue"
+    check "src/pages/LoginPage.vue"           test -f "$PROJECT_ROOT/client/src/pages/LoginPage.vue"
+    check "src/pages/HomePage.vue"            test -f "$PROJECT_ROOT/client/src/pages/HomePage.vue"
+    check "src/pages/EditPage.vue"            test -f "$PROJECT_ROOT/client/src/pages/EditPage.vue"
+    check "src/pages/PromptPage.vue"          test -f "$PROJECT_ROOT/client/src/pages/PromptPage.vue"
+    check "src/pages/HistoryPage.vue"         test -f "$PROJECT_ROOT/client/src/pages/HistoryPage.vue"
 
     # 2.4 路由守卫
-    check "router 含 LoginPage 路由"          grep -q "LoginPage" "$PROJECT_ROOT/src/router/index.ts"
-    check "router 含导航守卫 (beforeEach)"    grep -q "beforeEach" "$PROJECT_ROOT/src/router/index.ts"
+    check "router 含 LoginPage 路由"          grep -q "LoginPage" "$PROJECT_ROOT/client/src/router/index.ts"
+    check "router 含导航守卫 (beforeEach)"    grep -q "beforeEach" "$PROJECT_ROOT/client/src/router/index.ts"
 
     # 2.5 后端内容/Prompt 路由
     check "server/routes/content.ts"          test -f "$PROJECT_ROOT/server/routes/content.ts"
     check "server/routes/prompt.ts"           test -f "$PROJECT_ROOT/server/routes/prompt.ts"
 
     # 2.6 编译检查
-    check "前端 vue-tsc --noEmit"             bash -c "cd '$PROJECT_ROOT' && npx vue-tsc --noEmit > /dev/null 2>&1" || true
+    check "前端 vue-tsc --noEmit"             bash -c "cd '$PROJECT_ROOT/client' && npx vue-tsc --noEmit > /dev/null 2>&1" || true
     check "后端 tsc --noEmit"                 bash -c "cd '$PROJECT_ROOT/server' && npx tsc --noEmit > /dev/null 2>&1" || true
 
     # 2.7 冒烟测试（仅后端运行时有效）

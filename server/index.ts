@@ -53,22 +53,32 @@ async function main(): Promise<void> {
       // 生成随机安全密码（16 位）
       const randomPassword = randomBytes(12).toString('base64url');
 
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
+      // 优先读取环境变量，避免 tsx watch 重启干扰交互式输入
+      const envPassword = process.env.SUPER_ADMIN_PASSWORD?.trim();
+      let answer: string;
 
-      const answer: string = await new Promise((resolve) => {
-        rl.question(
-          '\n🔐 首次启动 — 创建超级管理员\n' +
-          `   用户名: ${cfg.admin.superAdmin.username}\n` +
-          '   请设置密码（直接回车使用随机密码）: ',
-          (a) => {
-            rl.close();
-            resolve(a.trim() || randomPassword);
-          },
-        );
-      });
+      if (envPassword) {
+        answer = envPassword;
+        log.info('通过 SUPER_ADMIN_PASSWORD 环境变量设置密码');
+      } else {
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+
+        answer = await new Promise((resolve) => {
+          rl.question(
+            '\n🔐 首次启动 — 创建超级管理员\n' +
+            `   用户名: ${cfg.admin.superAdmin.username}\n` +
+            '   💡 提示: 可设置 SUPER_ADMIN_PASSWORD 环境变量跳过交互输入\n' +
+            '   请设置密码（直接回车使用随机密码）: ',
+            (a) => {
+              rl.close();
+              resolve(a.trim() || randomPassword);
+            },
+          );
+        });
+      }
 
       const hash = await bcrypt.hash(answer, 12);
       const id = randomUUID();

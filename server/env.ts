@@ -9,9 +9,12 @@
 import dotenv from 'dotenv';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// .env 在项目根目录（server/ 的父目录）
-dotenv.config({ path: resolve(__dirname, '..', '.env') });
+// 优先 server/ 自身目录的 .env（解耦），不存在则回退到 monorepo 根目录（兼容旧布局）
+const localEnv = resolve(__dirname, '.env');
+const rootEnv = resolve(__dirname, '..', '.env');
+dotenv.config({ path: existsSync(localEnv) ? localEnv : rootEnv });

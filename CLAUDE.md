@@ -14,7 +14,7 @@ ContentFlow Lite 是一个 AI 内容生成系统，核心基于：
 
 Claude 在本项目中必须遵循：
 
-1. 先读取 rules/ 下对应模块
+1. 先读取 .rules/ 下对应模块
 2. 再理解当前任务目标
 3. 再进入实现或修改
 4. 所有输出必须符合 Content DTO
@@ -28,7 +28,7 @@ Claude 在本项目中必须遵循：
 
 读取：
 
-rules/workflow.mdc
+.rules/workflow.mdc
 
 关注内容：
 
@@ -43,7 +43,7 @@ rules/workflow.mdc
 
 读取：
 
-rules/prompt.mdc
+.rules/prompt.mdc
 
 关注内容：
 
@@ -58,7 +58,7 @@ rules/prompt.mdc
 
 读取：
 
-rules/architecture.mdc（Content DTO 部分）
+.rules/architecture.mdc（Content DTO 部分）
 **docs/types.md（核心类型定义 — FinalPrompt / OutputSchema / Provider 接口等）**
 
 关注内容：
@@ -75,7 +75,7 @@ rules/architecture.mdc（Content DTO 部分）
 
 读取：
 
-rules/ui.mdc
+.rules/ui.mdc
 
 关注内容：
 
@@ -90,7 +90,7 @@ rules/ui.mdc
 
 读取：
 
-rules/coding.mdc
+.rules/coding.mdc
 
 关注内容：
 
@@ -105,7 +105,7 @@ rules/coding.mdc
 
 读取：
 
-rules/provider.mdc
+.rules/provider.mdc
 
 关注内容：
 
@@ -124,7 +124,7 @@ rules/provider.mdc
 
 读取：
 
-rules/backend.mdc
+.rules/backend.mdc
 
 关注内容：
 
@@ -148,7 +148,7 @@ rules/backend.mdc
 
 读取：
 
-rules/logging.mdc
+.rules/logging.mdc
 
 关注内容：
 
@@ -163,7 +163,7 @@ rules/logging.mdc
 
 读取：
 
-rules/backend.mdc（API 文档方案）
+.rules/backend.mdc（API 文档方案）
 
 关注内容：
 

@@ -21,7 +21,7 @@
 | 模块 | 状态 | 位置 | 说明 |
 |------|------|------|------|
 | **文档体系** | ✅ | `docs/` `.rules/` `CLAUDE.md` | PRD/SPEC/13 个 rules 文件/CLAUDE.md/types.md 全部就绪 |
-| **前端骨架** | 🔵 | `src/` | 初始化代码存在，但基于旧架构（MockProvider/localStorage/6 节点），需整体重构 |
+| **前端骨架** | 🔵 | `client/src/` | 初始化代码存在，但基于旧架构（MockProvider/localStorage/6 节点），需整体重构 |
 | **后端** | ✅ | `server/` | Phase 1 已完成：Auth + Workflow + Provider + Repository + API 全部就绪 |
 | **数据库** | ✅ | TiDB Cloud | 8 张表 SQL + 连接池 + 4 个 Repository 已实现，真实 TiDB 云端连接验证通过 |
 | **认证系统** | ✅ | `server/routes/auth.ts` | JWT + bcrypt，注册/登录/刷新/me 4 个端点 |
@@ -38,7 +38,7 @@ Phase 0+1 已完成，后端核心链路跑通：
 - ✅ 7 节点 Workflow Pipeline（含 Mock/Gemini/DeepSeek 三个 Provider）
 - ✅ POST /api/generate → Content DTO 端到端验证通过
 
-`src/` 下的前端代码仍是旧架构骨架（纯前端、localStorage、Mock AI），不可直接用。Phase 2 将从零重构前端：Naive UI + 后端 API 对接。
+`client/src/` 下的前端代码仍是旧架构骨架（纯前端、localStorage、Mock AI），不可直接用。Phase 2 将从零重构前端：Naive UI + 后端 API 对接。
 
 ---
 
@@ -141,11 +141,11 @@ Phase 0+1 已完成，后端核心链路跑通：
 | # | 项 | 状态 | 说明 |
 |---|---|---|---|
 | F1 | Naive UI 集成 | ❌ | `pnpm add naive-ui` |
-| F2 | `src/stores/auth.ts` | ❌ | JWT 管理 + 路由守卫 |
-| F3 | `src/utils/api-client.ts` | ❌ | fetch 封装（Authorization头/401刷新） |
-| F4 | `src/repositories/http-repository.ts` | ❌ | HttpRepository<T> 实现 |
-| F5 | `src/types/index.ts` | 🔵 | 旧类型存在，需对齐 docs/types.md |
-| F6 | `src/constants/index.ts` | 🔵 | DEFAULT_MODEL='GPT-5.5' 需更新 |
+| F2 | `client/src/stores/auth.ts` | ❌ | JWT 管理 + 路由守卫 |
+| F3 | `client/src/utils/api-client.ts` | ❌ | fetch 封装（Authorization头/401刷新） |
+| F4 | `client/src/repositories/http-repository.ts` | ❌ | HttpRepository<T> 实现 |
+| F5 | `client/src/types/index.ts` | 🔵 | 旧类型存在，需对齐 docs/types.md |
+| F6 | `client/src/constants/index.ts` | 🔵 | DEFAULT_MODEL='GPT-5.5' 需更新 |
 | F7 | 前端 Logger | ❌ | loglevel 封装 |
 
 ---
@@ -391,9 +391,9 @@ Phase 4: 测试与发布（E2E + 部署 + 文档收尾）
 | # | 任务 | 产出 | 验证 |
 |---|---|---|---|
 | 2.1 | Naive UI 安装 + 集成 | `pnpm add naive-ui`，全局注册 | import 成功 |
-| 2.2 | `src/utils/api-client.ts` | fetch 封装（Authorization 头/401 刷新） | token 自动携带 |
-| 2.3 | `src/stores/auth.ts` | JWT 管理 + 路由守卫 | 未登录 → 跳转 /login |
-| 2.4 | `src/repositories/http-repository.ts` | HttpRepository<T> 实现 | 对接后端 REST |
+| 2.2 | `client/src/utils/api-client.ts` | fetch 封装（Authorization 头/401 刷新） | token 自动携带 |
+| 2.3 | `client/src/stores/auth.ts` | JWT 管理 + 路由守卫 | 未登录 → 跳转 /login |
+| 2.4 | `client/src/repositories/http-repository.ts` | HttpRepository<T> 实现 | 对接后端 REST |
 | 2.5 | LoginPage | 登录/注册表单 | 注册 → 登录 → 进首页 |
 | 2.6 | HomePage | 主题输入 + 平台/Provider 选择 + 生成 | 输入主题 → loading → 结果 |
 | 2.7 | EditPage | 编辑 + 导出（Markdown/JSON）+ 下载 | 编辑 → 导出 → 下载文件 |

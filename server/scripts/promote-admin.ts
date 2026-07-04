@@ -4,9 +4,12 @@
  * 用法: cd server && npx tsx scripts/promote-admin.ts <username>
  * 示例: cd server && npx tsx scripts/promote-admin.ts phase_gate_test
  */
-
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
-dotenv.config({ path: '../.env' });
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: resolve(__dirname, '..', '.env') });
 
 const { getPool } = await import('../db/client.js');
 const { createLogger } = await import('../utils/logger.js');
