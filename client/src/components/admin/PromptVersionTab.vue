@@ -23,8 +23,8 @@ interface PromptVersion {
 const items = ref<PromptVersion[]>([]);
 const loading = ref(false);
 const page = ref(1);
+const limit = ref(10);
 const total = ref(0);
-const limit = 20;
 
 const columns: DataTableColumn<PromptVersion>[] = [
   { title: 'ID', key: 'id', width: 120, ellipsis: { tooltip: true } },
@@ -42,7 +42,7 @@ async function load(): Promise<void> {
   loading.value = true;
   try {
     const res = await api.get<{ data: { items: PromptVersion[]; pagination: { total: number } } }>(
-      `/api/admin/prompt-versions?page=${page.value}&limit=${limit}`,
+      `/api/admin/prompt-versions?page=${page.value}&limit=${limit.value}`,
     );
     const d = (res as any).data || res;
     items.value = d.items || [];
@@ -59,6 +59,12 @@ function onPageChange(p: number): void {
   load();
 }
 
+function onPageSizeChange(ps: number): void {
+  limit.value = ps;
+  page.value = 1;
+  load();
+}
+
 onMounted(load);
 </script>
 
@@ -70,7 +76,10 @@ onMounted(load);
     :bordered="false"
     :pagination="{
       page: page, pageSize: limit, itemCount: total,
+      showSizePicker: true,
+      pageSizes: [10, 20, 50, 100],
       onChange: onPageChange,
     }"
+    @update:page-size="onPageSizeChange"
   />
 </template>

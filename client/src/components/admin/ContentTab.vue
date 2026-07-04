@@ -30,8 +30,8 @@ interface ContentItem {
 const items = ref<ContentItem[]>([]);
 const loading = ref(false);
 const page = ref(1);
+const limit = ref(10);
 const total = ref(0);
-const limit = 20;
 const checkedRowKeys = ref<DataTableRowKey[]>([]);
 
 const typeCol: DataTableColumn<ContentItem> = {
@@ -68,7 +68,7 @@ async function load(): Promise<void> {
   loading.value = true;
   try {
     const res = await api.get<{ data: { items: ContentItem[]; pagination: { total: number } } }>(
-      `/api/admin/contents?page=${page.value}&limit=${limit}`,
+      `/api/admin/contents?page=${page.value}&limit=${limit.value}`,
     );
     const d = (res as any).data || res;
     items.value = d.items || [];
@@ -114,6 +114,13 @@ function onPageChange(p: number): void {
   load();
 }
 
+function onPageSizeChange(ps: number): void {
+  limit.value = ps;
+  page.value = 1;
+  checkedRowKeys.value = [];
+  load();
+}
+
 onMounted(load);
 </script>
 
@@ -138,8 +145,11 @@ onMounted(load);
       @update:checked-row-keys="handleCheck"
       :pagination="{
         page: page, pageSize: limit, itemCount: total,
+        showSizePicker: true,
+        pageSizes: [10, 20, 50, 100],
         onChange: onPageChange,
       }"
+      @update:page-size="onPageSizeChange"
     />
   </div>
 </template>
