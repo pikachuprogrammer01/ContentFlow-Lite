@@ -68,8 +68,12 @@ export const config = {
     cookieSecret: process.env.ADMIN_COOKIE_SECRET || 'admin-cookie-secret-change-me',
     /** 管理员注册密钥。注册时传 adminKey 与此一致则获得 admin 角色 */
     setupKey: process.env.ADMIN_SETUP_KEY || 'admin-setup-key-change-me',
-    /** 超级管理员注册密钥。注册时传 adminKey 与此一致则获得 super_admin 角色 */
-    superSetupKey: process.env.SUPER_ADMIN_SETUP_KEY || 'super-admin-setup-key-change-me',
+    /** 系统初始化时自动创建的超级管理员（唯一，不可通过注册创建） */
+    superAdmin: {
+      username: process.env.SUPER_ADMIN_USERNAME || 'superadmin',
+      password: process.env.SUPER_ADMIN_PASSWORD || '',
+      email: process.env.SUPER_ADMIN_EMAIL || 'superadmin@contentflow.local',
+    },
   },
 
   redis: {

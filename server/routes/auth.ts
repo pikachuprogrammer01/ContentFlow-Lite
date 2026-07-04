@@ -79,18 +79,15 @@ export function createAuthRouter(): Router {
       const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
 
       // 确定角色：
-      // 1. 提供超级管理员密钥 → super_admin
-      // 2. 提供管理员密钥 → admin
-      // 3. 数据库中没有用户（首次安装） → admin
-      // 4. 其他 → 普通用户
-      const superKey = config.admin.superSetupKey;
+      // 1. 提供管理员密钥 → admin
+      // 2. 数据库中没有用户（首次安装） → admin
+      // 3. 其他 → 普通用户
+      // 注：super_admin 只能由系统初始化创建，不可通过注册获得
       const adminKey = config.admin.setupKey;
-      const isSuperAdmin = !!(req.body.adminKey && superKey && req.body.adminKey === superKey);
-      const isAdmin = !isSuperAdmin && !!(req.body.adminKey && adminKey && req.body.adminKey === adminKey);
+      const isAdmin = !!(req.body.adminKey && adminKey && req.body.adminKey === adminKey);
       const userCount = await userRepo.countAll();
-      let role: 'super_admin' | 'admin' | 'user' = 'user';
-      if (isSuperAdmin) role = 'super_admin';
-      else if (isAdmin || userCount === 0) role = 'admin';
+      const role: 'super_admin' | 'admin' | 'user' =
+        isAdmin || userCount === 0 ? 'admin' : 'user';
 
       // 创建用户
       const userId = randomUUID();
