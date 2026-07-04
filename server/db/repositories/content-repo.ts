@@ -8,19 +8,30 @@
 import { getPool } from '../client.js';
 import type { Content, ContentRow } from '../../types.js';
 
+/** 安全解析 JSON，失败时返回默认值 */
+function safeJsonParse<T>(value: unknown, fallback: T): T {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'object') return value as T;
+  try {
+    return JSON.parse(value as string) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 /** 将 DB 行转换为 Content DTO */
 function rowToContent(row: ContentRow): Content {
   return {
     id: row.id,
     topic: row.topic,
     platform: row.platform,
-    titles: JSON.parse(row.titles),
-    cover: JSON.parse(row.cover),
-    pages: JSON.parse(row.pages),
-    tags: JSON.parse(row.tags),
+    titles: safeJsonParse(row.titles, []),
+    cover: safeJsonParse(row.cover, { title: '', subtitle: '' }),
+    pages: safeJsonParse(row.pages, []),
+    tags: safeJsonParse(row.tags, []),
     summary: row.summary,
     extraRequirements: row.extra_requirements,
-    metadata: JSON.parse(row.metadata),
+    metadata: safeJsonParse(row.metadata, { promptId: '', promptVersion: '', model: '', platform: '', createdAt: '', generator: '' }),
   };
 }
 
