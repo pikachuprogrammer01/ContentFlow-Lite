@@ -4,7 +4,9 @@
  * POST /api/auth/register  — 注册
  * POST /api/auth/login     — 登录
  * GET  /api/auth/me        — 获取当前用户（需认证）
- * POST /api/auth/refresh   — 刷新 Token
+ *
+ * 单 Token 模式：accessToken 有效期 24 小时，无刷新机制。
+ * 适用场景：单次会话型应用，用户登出/Token 过期后重新登录即可。
  */
 
 import { Router, type Request, type Response } from 'express';
@@ -21,14 +23,9 @@ const log = createLogger('routes/auth');
 
 const BCRYPT_COST = 12;
 
-/** 生成 access token（15 分钟有效期） */
-function generateAccessToken(userId: string, role: string): string {
-  return jwt.sign({ userId, role }, config.jwt.secret, { expiresIn: '15m' });
-}
-
-/** 生成 refresh token（7 天有效期） */
-function generateRefreshToken(userId: string, role: string): string {
-  return jwt.sign({ userId, role }, config.jwt.refreshSecret, { expiresIn: '7d' });
+/** 生成 access token（24 小时有效期） */
+function generateToken(userId: string, role: string): string {
+  return jwt.sign({ userId, role }, config.jwt.secret, { expiresIn: '24h' });
 }
 
 export function createAuthRouter(): Router {
@@ -91,15 +88,13 @@ export function createAuthRouter(): Router {
       });
 
       // 生成 Token
-      const accessToken = generateAccessToken(userId, 'user');
-      const refreshToken = generateRefreshToken(userId, 'user');
+      const accessToken = generateToken(userId, 'user');
 
       log.info('用户注册成功', { username: username.trim() });
 
       res.status(201).json({
         user: { id: userId, username: username.trim(), email: email.trim().toLowerCase(), role: 'user' },
         accessToken,
-        refreshToken,
       });
     } catch (err) {
       log.error('注册失败', { error: String(err) });
@@ -140,8 +135,7 @@ export function createAuthRouter(): Router {
       }
 
       // 生成 Token
-      const accessToken = generateAccessToken(user.id, user.role);
-      const refreshToken = generateRefreshToken(user.id, user.role);
+      const accessToken = generateToken(user.id, user.role);
 
       log.info('用户登录成功', { userId: user.id });
 
@@ -153,7 +147,6 @@ export function createAuthRouter(): Router {
           role: user.role,
         },
         accessToken,
-        refreshToken,
       });
     } catch (err) {
       log.error('登录失败', { error: String(err) });
@@ -187,49 +180,6 @@ export function createAuthRouter(): Router {
       });
     } catch (err) {
       log.error('获取用户信息失败', { error: String(err) });
-      res.status(500).json({
-        error: { code: 'UNKNOWN_ERROR', message: '服务器内部错误' },
-      });
-    }
-  });
-
-  // ── POST /api/auth/refresh ─────────────────────────────
-  router.post('/refresh', async (req: Request, res: Response) => {
-    try {
-      const { refreshToken } = req.body;
-
-      if (!refreshToken) {
-        res.status(400).json({
-          error: { code: 'INPUT_ERROR', message: 'refreshToken 不能为空' },
-        });
-        return;
-      }
-
-      try {
-        const payload = jwt.verify(refreshToken, config.jwt.refreshSecret) as {
-          userId: string;
-          role: string;
-        };
-
-        const user = await userRepo.findById(payload.userId);
-        if (!user) {
-          res.status(401).json({
-            error: { code: 'UNAUTHORIZED', message: '用户不存在' },
-          });
-          return;
-        }
-
-        const newAccessToken = generateAccessToken(user.id, user.role);
-        const newRefreshToken = generateRefreshToken(user.id, user.role);
-
-        res.json({ accessToken: newAccessToken, refreshToken: newRefreshToken });
-      } catch {
-        res.status(401).json({
-          error: { code: 'TOKEN_EXPIRED', message: 'Refresh Token 无效或已过期' },
-        });
-      }
-    } catch (err) {
-      log.error('刷新 Token 失败', { error: String(err) });
       res.status(500).json({
         error: { code: 'UNKNOWN_ERROR', message: '服务器内部错误' },
       });

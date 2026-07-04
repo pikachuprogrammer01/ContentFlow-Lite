@@ -328,6 +328,7 @@ Phase 4: 测试与发布（E2E + 部署 + 文档收尾）
 | # | 日期 | 描述 | 优先级 | 状态 |
 |---|---|---|---|---|
 | — | — | 暂无 | — | — |
+| 1 | 2026-07-04 | 认证从双 Token 简化为单 Token。accessToken 有效期从 15min 改为 24h，去掉 /api/auth/refresh 端点和 refreshToken。更新 config.ts / auth.ts / .env.example / .env / backend.mdc | 中 | ✅ |
 
 ---
 

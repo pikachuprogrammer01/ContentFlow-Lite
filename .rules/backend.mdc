@@ -14,7 +14,7 @@ alwaysApply: true
 | 数据库驱动 | **mysql2** | Node.js MySQL 客户端 |
 | ORM | **TypeORM**（必须） | AdminJS 依赖 TypeORM 接入，repository 层可直接写 SQL |
 | 数据库管理 | **AdminJS** + `@adminjs/express` + `@adminjs/typeorm` | 自动生成 CRUD 界面 |
-| 认证 | **JWT**（`jsonwebtoken`） | access token 15min + refresh token 7d |
+| 认证 | **JWT**（`jsonwebtoken`） | 单 Token 模式，24h 有效期，无刷新机制 |
 | 密码哈希 | **bcryptjs** | cost=12 |
 | 数据加密 | **AES-256-GCM**（Node.js crypto） | API Key / DB 密码等敏感字段落库前加密，读取时解密 |
 | 安全头 | **helmet** | HTTP 安全头 |
@@ -54,7 +54,7 @@ ContentFlow Lite
 │   ├── index.ts                  # 入口：启动 Express 服务
 │   ├── app.ts                    # Express app 配置（中间件/路由挂载）
 │   ├── routes/
-│   │   ├── auth.ts               # /api/auth/login | register | refresh | me | reset-password
+│   │   ├── auth.ts               # /api/auth/login | register | me
 │   │   ├── content.ts            # /api/content/*
 │   │   ├── prompt.ts             # /api/prompt/*
 │   │   ├── generate.ts           # /api/generate
@@ -333,19 +333,14 @@ const admin = new AdminJS({
     ├─ 校验 username/email 唯一性
     ├─ bcryptjs 哈希密码
     ├─ 创建用户（默认 role=user）
-    └─ 返回 JWT token pair
+    └─ 返回 accessToken
 
 登录
   POST /api/auth/login
     ├─ 查用户（username 或 email）
     ├─ bcryptjs 验证密码
-    ├─ 生成 access token (15min) + refresh token (7d)
-    └─ 返回 token pair
-
-刷新
-  POST /api/auth/refresh
-    ├─ 验证 refresh token
-    └─ 返回新的 access token
+    ├─ 生成 access token (24h)
+    └─ 返回 accessToken
 
 密码重置
   POST /api/auth/reset-password
@@ -364,7 +359,7 @@ const admin = new AdminJS({
 - 验证失败 → HTTP 401 `{ error: { code: "UNAUTHORIZED" } }`
 - 验证成功 → 将 `{ userId, username, role }` 挂到 `req.user`
 - 前端 Store 在每次请求时自动带 `Authorization: Bearer <token>`
-- access token 和 refresh token 存于 localStorage，通过 CSP 头防御 XSS
+- access token 存于 localStorage，通过 CSP 头防御 XSS
 
 ### 5.3 前端认证状态
 
@@ -373,7 +368,6 @@ const admin = new AdminJS({
 interface AuthState {
   user: { id: string; username: string; role: string } | null;
   accessToken: string | null;
-  refreshToken: string | null;
   isAuthenticated: boolean;
 }
 
@@ -399,7 +393,7 @@ router.beforeEach((to, from, next) => {
 | CORS | 仅允许前端域名 | `cors({ origin: frontendUrl })` |
 | 登录爆破 | Rate Limit | `express-rate-limit` 登录路由 5 次/分钟/IP |
 | AI 生成滥用 | Rate Limit | `express-rate-limit` `/api/generate` 10 次/分钟/用户 |
-| Token 泄露 | 短 access token (15min) + refresh 轮换 + localStorage + CSP 防御 XSS | JWT `expiresIn: '15m'` + Helmet CSP `script-src 'self'` |
+| Token 泄露 | access token (24h) + localStorage + CSP 防御 XSS | JWT `expiresIn: '24h'` + Helmet CSP `script-src 'self'` |
 | API Key 泄露 | 加密存储 + 前端不回显 + API 不返回实际值 | AES-256-GCM 加密 + isSet 布尔响应 |
 | 请求体过大 | 限制大小 | `express.json({ limit: '10mb' })` |
 | 安全头 | `helmet()` | Express 中间件 |
@@ -432,7 +426,6 @@ DB_USER=          # 用户名
 DB_PASSWORD=      # 密码
 DB_DATABASE=      # 数据库名
 JWT_SECRET=         # JWT 签名密钥（生产环境必须换强随机值）
-JWT_REFRESH_SECRET= # Refresh Token 签名密钥
 REDIS_URL=          # Redis 连接（可选，不配则跳过 Redis）
 ENCRYPTION_KEY=     # AES-256 加密密钥（64 位 hex 字符串，生产环境必须换）
 ADMIN_EMAIL=        # AdminJS 管理后台登录邮箱
@@ -608,8 +601,6 @@ app.use(admin.options.rootPath, adminRouter);
 # 认证
 POST   /api/auth/register        # 注册
 POST   /api/auth/login           # 登录
-POST   /api/auth/refresh         # 刷新 token
-POST   /api/auth/reset-password  # 密码重置（admin 或邮箱验证）
 GET    /api/auth/me              # 获取当前用户
 
 # 内容（需认证）
@@ -716,11 +707,11 @@ HttpRepository → Express API → 数据库
 
 | 文件 | 职责 |
 |---|---|
-| `src/stores/auth.ts` | 认证状态（登录/注册/Token 刷新/路由守卫） |
+| `src/stores/auth.ts` | 认证状态（登录/注册/登出/路由守卫） |
 | `src/pages/SettingsPage.vue` | 设置页（DB 配置 / API Key / 表状态） |
 | `src/pages/LoginPage.vue` | 登录注册页 |
 | `src/repositories/http-repository.ts` | `HttpRepository<T>` 实现 |
-| `src/utils/api-client.ts` | fetch 封装（自动附加 Authorization 头，401 时尝试刷新 Token） |
+| `src/utils/api-client.ts` | fetch 封装（自动附加 Authorization 头，401 时跳转登录页） |
 
 ### 10.3 离线降级
 
@@ -774,3 +765,4 @@ export function createRepository<T extends { id: string }>(collectionName: strin
 | 2026-07-03 | 不做国际化 | 中文 UI |
 | 2026-07-03 | 不做离线模式 | 数据库不可用 → 错误页，不做 localStorage 离线缓存 |
 | 2026-07-03 | CSP 策略 | Helmet `script-src 'self'; object-src 'none'; base-uri 'self'`，防御 XSS |
+| 2026-07-04 | 认证简化为单 Token | 双 Token 适合长会话/高安全场景，ContentFlow Lite 是单次会话型应用，不需要 refresh。accessToken 改为 24h 有效期，去掉 /api/auth/refresh 端点和 refreshToken |

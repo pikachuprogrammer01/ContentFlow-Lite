@@ -58,7 +58,6 @@ export const config = {
 
   jwt: {
     secret: process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production',
-    refreshSecret: process.env.JWT_REFRESH_SECRET || 'dev-jwt-refresh-secret-change-in-production',
   },
 
   encryptionKey: process.env.ENCRYPTION_KEY || '0'.repeat(64),
