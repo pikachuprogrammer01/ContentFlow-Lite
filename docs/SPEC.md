@@ -27,7 +27,7 @@ PRD 用于描述产品需要实现哪些功能，而本规范用于定义这些�
 - Exporter（导出模块）
 - Storage / Repository（数据存储）
 - Auth Module（认证模块）
-- AdminJS Panel（数据库管理面板）
+- Admin Panel（管理面板 — 用户/内容/生成记录/Prompt 模板/版本 CRUD）
 - Express API Layer（后端 API 层）
 
 未来新增的任何模块，也必须遵循本规范定义的架构原则。
@@ -141,8 +141,8 @@ Workflow Engine 是整个系统唯一的业务入口。
     Editor     Preview     Exporter
                   │
                   ▼
-          ┌── AdminJS ──┐
-          │  (仅 admin)  │
+          ┌── Admin Panel ──┐
+          │  (admin+)   │
           └──────────────┘
 ```
 
@@ -196,7 +196,7 @@ Express 后端是整个系统唯一的外部接口层。
 - 请求参数校验
 - 响应格式化
 - CORS / Rate Limit / Helmet 安全中间件
-- AdminJS 数据库管理面板挂载
+- Admin 管理面板挂载（/admin，5 Tab：用户/内容/生成记录/Prompt 模板/Prompt 版本）
 
 不得：
 
@@ -1251,7 +1251,7 @@ Workflow 只调用 Repository Interface。
 
 存储内容包括（详见 backend.mdc）：
 
-- users（用户）
+- users（用户 — role 支持 super_admin / admin / user 三级）
 - contents（Content DTO）
 - prompt_templates（Prompt 模板，含类型 text/image）
 - prompt_versions（Prompt 版本快照，含 outputSchema）
