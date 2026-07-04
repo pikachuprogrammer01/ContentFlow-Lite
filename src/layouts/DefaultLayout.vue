@@ -1,91 +1,74 @@
 <script setup lang="ts">
 /**
- * 默认布局 — 顶部导航 + 内容区
+ * 默认布局 — Naive UI 顶部导航 + 内容区
  */
+import { NLayout, NLayoutHeader, NLayoutContent, NMenu, NSpace, NButton, NText } from 'naive-ui';
+import { useRouter, useRoute } from 'vue-router';
+import { computed } from 'vue';
+import type { MenuOption } from 'naive-ui';
+
+const router = useRouter();
+const route = useRoute();
+
+const menuOptions: MenuOption[] = [
+  { label: '生成', key: 'home' },
+  { label: '历史', key: 'history' },
+  { label: 'Prompt', key: 'prompt' },
+];
+
+const activeKey = computed(() => {
+  const name = String(route.name || 'home');
+  return name;
+});
+
+function handleMenuUpdate(key: string): void {
+  router.push({ name: key });
+}
 </script>
 
 <template>
-  <div class="app-layout">
-    <header class="app-header">
+  <NLayout class="app-layout">
+    <NLayoutHeader bordered>
       <div class="header-inner">
-        <h1 class="app-logo">
-          <router-link to="/">ContentFlow Lite</router-link>
-        </h1>
-        <nav class="app-nav">
-          <router-link to="/">生成</router-link>
-          <router-link to="/history">历史</router-link>
-          <router-link to="/prompt">Prompt</router-link>
-        </nav>
+        <router-link to="/" class="logo-link">
+          <NText strong style="font-size: 18px">ContentFlow Lite</NText>
+        </router-link>
+        <NMenu
+          :value="activeKey"
+          :options="menuOptions"
+          mode="horizontal"
+          @update:value="handleMenuUpdate"
+        />
       </div>
-    </header>
-    <main class="app-main">
-      <slot />
-    </main>
-  </div>
+    </NLayoutHeader>
+    <NLayoutContent>
+      <div class="main-content">
+        <slot />
+      </div>
+    </NLayoutContent>
+  </NLayout>
 </template>
 
 <style scoped>
 .app-layout {
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.app-header {
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
-  padding: 0 24px;
-  height: 56px;
-  display: flex;
-  align-items: center;
-  position: sticky;
-  top: 0;
-  z-index: 100;
 }
 
 .header-inner {
-  width: 100%;
   max-width: 1200px;
   margin: 0 auto;
   display: flex;
   align-items: center;
   gap: 32px;
+  padding: 0 24px;
 }
 
-.app-logo {
-  font-size: 18px;
-  font-weight: 700;
-  margin: 0;
-}
-
-.app-logo a {
-  color: #111827;
+.logo-link {
   text-decoration: none;
+  white-space: nowrap;
 }
 
-.app-nav {
-  display: flex;
-  gap: 20px;
-}
-
-.app-nav a {
-  font-size: 14px;
-  color: #6b7280;
-  text-decoration: none;
-  padding: 4px 0;
-  border-bottom: 2px solid transparent;
-  transition: all 0.15s;
-}
-
-.app-nav a:hover,
-.app-nav a.router-link-active {
-  color: #111827;
-  border-bottom-color: #3b82f6;
-}
-
-.app-main {
-  flex: 1;
-  width: 100%;
+.main-content {
   max-width: 1200px;
   margin: 0 auto;
   padding: 24px;

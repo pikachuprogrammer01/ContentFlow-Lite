@@ -13,6 +13,7 @@
     "postinstall": "bash -c '[ -d .git ] && ln -sf ../../scripts/pre-commit-hook.sh .git/hooks/pre-commit 2>/dev/null; ln -sf ../../scripts/pre-push-hook.sh .git/hooks/pre-push 2>/dev/null || true'"
   },
   "dependencies": {
+    "naive-ui": "^2.44.1",
     "pinia": "^3.0.4",
     "vue": "^3.5.39",
     "vue-router": "^4.6.4"
