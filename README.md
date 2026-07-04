@@ -160,7 +160,6 @@ ContentFlow-Lite/
 │   │   └── migrate-role-enum.ts
 │   └── utils/                  # 工具（logger 等）
 │
-├── prompts/                    # Prompt 模板独立存放
 ├── docs/                       # 项目文档（PRD/SPEC/types/PHASE_GATE）
 ├── scripts/                    # Phase Gate 脚本 + Git hooks
 ├── .rules/                     # AI 开发规范（9 个规则文件）
@@ -305,7 +304,7 @@ SUPER_ADMIN_PASSWORD=your-password cd server && pnpm dev
 
 ### 3. Prompt First
 
-Prompt 与代码分离，独立存放于 `prompts/` 目录。每次修改生成新版本，不可覆盖。
+Prompt 与代码分离，通过数据库 `prompt_templates` 和 `prompt_versions` 表管理，每次修改生成新版本，不可覆盖。
 
 ### 4. Provider Independent
 

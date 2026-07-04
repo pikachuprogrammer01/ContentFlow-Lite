@@ -2,7 +2,7 @@
  * Prompt Template 管理
  *
  * 不同平台使用不同的 Prompt Template。
- * MVP 阶段内置默认模板，后续可从 prompts/ 目录或配置加载。
+ * MVP 阶段内置默认模板，后续可从后端 API 或数据库加载。
  */
 
 import type { PromptTemplate } from '@/types';
