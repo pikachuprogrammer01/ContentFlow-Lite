@@ -8,6 +8,85 @@ import { getPool } from '../client.js';
 import type { PromptTemplateRow, FinalPrompt } from '../../types.js';
 
 /**
+ * 获取用户的所有 Prompt 模板列表。
+ */
+export async function listTemplates(userId: string): Promise<PromptTemplateRow[]> {
+  const pool = getPool();
+  const [rows] = await pool.query<import('mysql2/promise').RowDataPacket[]>(
+    'SELECT * FROM prompt_templates WHERE user_id = ? ORDER BY updated_at DESC',
+    [userId],
+  );
+  return rows as PromptTemplateRow[];
+}
+
+/**
+ * 创建新模板。
+ */
+export async function createTemplate(template: PromptTemplateRow): Promise<void> {
+  const pool = getPool();
+  await pool.query(
+    `INSERT INTO prompt_templates (id, user_id, name, type, is_default, platform, system_prompt, user_prompt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      template.id,
+      template.user_id,
+      template.name,
+      template.type,
+      template.is_default,
+      template.platform,
+      template.system_prompt,
+      template.user_prompt,
+    ],
+  );
+}
+
+/**
+ * 更新模板字段。
+ */
+export async function updateTemplate(
+  id: string,
+  fields: Partial<Pick<PromptTemplateRow, 'name' | 'system_prompt' | 'user_prompt' | 'is_default' | 'platform'>>,
+): Promise<void> {
+  const pool = getPool();
+  const sets: string[] = [];
+  const values: unknown[] = [];
+
+  for (const [key, value] of Object.entries(fields)) {
+    sets.push(`${key} = ?`);
+    values.push(value);
+  }
+
+  if (sets.length === 0) return;
+
+  await pool.query(
+    `UPDATE prompt_templates SET ${sets.join(', ')} WHERE id = ?`,
+    [...values, id],
+  );
+}
+
+/**
+ * 删除模板。
+ */
+export async function deleteTemplate(id: string): Promise<void> {
+  const pool = getPool();
+  // 先删版本，再删模板
+  await pool.query('DELETE FROM prompt_versions WHERE prompt_id = ?', [id]);
+  await pool.query('DELETE FROM prompt_templates WHERE id = ?', [id]);
+}
+
+/**
+ * 获取模板的所有版本列表。
+ */
+export async function listVersions(promptId: string): Promise<import('mysql2/promise').RowDataPacket[]> {
+  const pool = getPool();
+  const [rows] = await pool.query<import('mysql2/promise').RowDataPacket[]>(
+    'SELECT * FROM prompt_versions WHERE prompt_id = ? ORDER BY created_at DESC',
+    [promptId],
+  );
+  return rows;
+}
+
+/**
  * 获取用户对某平台的默认 Prompt 模板。
  */
 export async function findDefaultTextPrompt(userId: string, platform: string): Promise<PromptTemplateRow | null> {
