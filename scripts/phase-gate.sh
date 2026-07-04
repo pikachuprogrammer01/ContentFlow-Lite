@@ -153,8 +153,104 @@ run_phase_1_checks() {
     else echo "  ❌ Phase 1 出口不达标 — $((total - pass)) 项未通过"; return 1; fi
 }
 
-# ── Phase 2-4 出口（占位，Phase 开始时补全）───────────────
-run_phase_2_checks() { echo "⚠️  Phase 2 出口检查尚未定义（待 Phase 2 开始时补全）"; return 0; }
+# ── Phase 2 出口标准 ────────────────────────────────────────
+run_phase_2_checks() {
+    local total=0 pass=0
+    local results=""
+
+    check() {
+        local desc="$1"; shift
+        total=$((total + 1))
+        if "$@"; then pass=$((pass + 1)); results+="  ✅ $desc"$'\n'
+        else results+="  ❌ $desc"$'\n'; fi
+    }
+
+    # 2.1 Naive UI 集成
+    check "naive-ui 在 package.json 中"     grep -q '"naive-ui"' "$PROJECT_ROOT/package.json"
+    check "naive-ui 已安装 (node_modules)"   test -d "$PROJECT_ROOT/node_modules/naive-ui"
+
+    # 2.2 前端基础设施
+    check "src/utils/api-client.ts"           test -f "$PROJECT_ROOT/src/utils/api-client.ts"
+    check "src/stores/auth.ts"                test -f "$PROJECT_ROOT/src/stores/auth.ts"
+    check "src/repositories/http-repository.ts"   test -f "$PROJECT_ROOT/src/repositories/http-repository.ts"
+
+    # 2.3 前端页面（全部 5 个页面就位）
+    check "src/pages/LoginPage.vue"           test -f "$PROJECT_ROOT/src/pages/LoginPage.vue"
+    check "src/pages/HomePage.vue"            test -f "$PROJECT_ROOT/src/pages/HomePage.vue"
+    check "src/pages/EditPage.vue"            test -f "$PROJECT_ROOT/src/pages/EditPage.vue"
+    check "src/pages/PromptPage.vue"          test -f "$PROJECT_ROOT/src/pages/PromptPage.vue"
+    check "src/pages/HistoryPage.vue"         test -f "$PROJECT_ROOT/src/pages/HistoryPage.vue"
+
+    # 2.4 路由守卫
+    check "router 含 LoginPage 路由"          grep -q "LoginPage" "$PROJECT_ROOT/src/router/index.ts"
+    check "router 含导航守卫 (beforeEach)"    grep -q "beforeEach" "$PROJECT_ROOT/src/router/index.ts"
+
+    # 2.5 后端内容/Prompt 路由
+    check "server/routes/content.ts"          test -f "$PROJECT_ROOT/server/routes/content.ts"
+    check "server/routes/prompt.ts"           test -f "$PROJECT_ROOT/server/routes/prompt.ts"
+
+    # 2.6 编译检查
+    check "前端 vue-tsc --noEmit"             bash -c "cd '$PROJECT_ROOT' && npx vue-tsc --noEmit > /dev/null 2>&1" || true
+    check "后端 tsc --noEmit"                 bash -c "cd '$PROJECT_ROOT/server' && npx tsc --noEmit > /dev/null 2>&1" || true
+
+    # 2.7 冒烟测试（仅后端运行时有效）
+    if curl -s http://localhost:3001/health > /dev/null 2>&1; then
+        local TEST_USER="phase2_smoke"
+        local TEST_PASS="SmokeTest123!"
+        local TEST_EMAIL="smoke2@test.local"
+        local BASE="http://localhost:3001"
+
+        local TOKEN=$(curl -s -X POST "$BASE/api/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PASS\"}" \
+            2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('accessToken',''))" 2>/dev/null)
+
+        if [[ -z "$TOKEN" ]]; then
+            curl -s -X POST "$BASE/api/auth/register" \
+                -H 'Content-Type: application/json' \
+                -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PASS\",\"email\":\"$TEST_EMAIL\"}" \
+                > /dev/null 2>&1
+            TOKEN=$(curl -s -X POST "$BASE/api/auth/login" \
+                -H 'Content-Type: application/json' \
+                -d "{\"username\":\"$TEST_USER\",\"password\":\"$TEST_PASS\"}" \
+                2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('accessToken',''))" 2>/dev/null)
+        fi
+
+        if [[ -n "$TOKEN" ]]; then
+            local content_code=$(curl -s -o /dev/null -w '%{http_code}' \
+                -H "Authorization: Bearer $TOKEN" \
+                "$BASE/api/content" 2>/dev/null)
+            total=$((total + 1))
+            if [[ "$content_code" == "200" ]]; then pass=$((pass + 1)); results+="  ✅ GET /api/content 返回 200"$'\n'
+            else results+="  ❌ GET /api/content 返回 $content_code"$'\n'; fi
+
+            local prompt_code=$(curl -s -o /dev/null -w '%{http_code}' \
+                -H "Authorization: Bearer $TOKEN" \
+                "$BASE/api/prompt/templates" 2>/dev/null)
+            total=$((total + 1))
+            if [[ "$prompt_code" == "200" ]]; then pass=$((pass + 1)); results+="  ✅ GET /api/prompt/templates 返回 200"$'\n'
+            else results+="  ❌ GET /api/prompt/templates 返回 $prompt_code"$'\n'; fi
+
+            local gen_code=$(curl -s -X POST "$BASE/api/generate" \
+                -H 'Content-Type: application/json' \
+                -H "Authorization: Bearer $TOKEN" \
+                -d '{"topic":"smoke_test","platform":"xiaohongshu","provider":"mock"}' \
+                -w '%{http_code}' -o /dev/null 2>/dev/null)
+            total=$((total + 1))
+            if [[ "$gen_code" == "200" ]]; then pass=$((pass + 1)); results+="  ✅ POST /api/generate 返回 200"$'\n'
+            else results+="  ❌ POST /api/generate 返回 $gen_code"$'\n'; fi
+        else
+            results+="  ⚠️ 无法获取 token，跳过 API 冒烟测试"$'\n'
+        fi
+    fi
+
+    echo -e "\n$results"
+    echo "  结果: $pass/$total 通过"
+    if [[ $pass -eq $total ]]; then echo "  ✅ Phase 2 出口达标"; return 0
+    else echo "  ❌ Phase 2 出口不达标 — $((total - pass)) 项未通过"; return 1; fi
+}
+
+# ── Phase 3-4 出口（占位，Phase 开始时补全）───────────────
 run_phase_3_checks() { echo "⚠️  Phase 3 出口检查尚未定义（待 Phase 3 开始时补全）"; return 0; }
 run_phase_4_checks() { echo "⚠️  Phase 4 出口检查尚未定义（待 Phase 4 开始时补全）"; return 0; }
 
