@@ -55,12 +55,27 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
 /**
  * Admin 角色守卫中间件。
  * 必须在 authMiddleware 之后使用。
- * 仅允许 role=admin 通过。
+ * 仅允许 role=admin 或 super_admin 通过。
  */
 export function adminGuard(req: Request, res: Response, next: NextFunction): void {
   if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'super_admin')) {
     res.status(403).json({
       error: { code: 'FORBIDDEN', message: '需要管理员权限' },
+    });
+    return;
+  }
+  next();
+}
+
+/**
+ * Super Admin 角色守卫中间件。
+ * 必须在 authMiddleware 之后使用。
+ * 仅允许 role=super_admin 通过。
+ */
+export function superAdminGuard(req: Request, res: Response, next: NextFunction): void {
+  if (!req.user || req.user.role !== 'super_admin') {
+    res.status(403).json({
+      error: { code: 'FORBIDDEN', message: '需要超级管理员权限' },
     });
     return;
   }

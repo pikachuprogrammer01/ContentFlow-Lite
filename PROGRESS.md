@@ -1,6 +1,6 @@
 # ContentFlow Lite — 实现进度追踪
 
-> 最后更新：2026-07-04
+> 最后更新：2026-07-05（二次更新）
 > 基于 `docs/PRD.md`、`docs/SPEC.md`、`.rules/` 全部规范
 
 ---
@@ -21,7 +21,7 @@
 | 模块 | 状态 | 位置 | 说明 |
 |------|------|------|------|
 | **文档体系** | ✅ | `docs/` `.rules/` `CLAUDE.md` | PRD/SPEC/13 个 rules 文件/CLAUDE.md/types.md 全部就绪 |
-| **前端骨架** | 🔵 | `client/src/` | 初始化代码存在，但基于旧架构（MockProvider/localStorage/6 节点），需整体重构 |
+| **前端骨架** | ✅ | `client/src/` | Naive UI + 认证 + 生成 + 管理面板已对接后端 API |
 | **后端** | ✅ | `server/` | Phase 1 已完成：Auth + Workflow + Provider + Repository + API 全部就绪 |
 | **数据库** | ✅ | TiDB Cloud | 8 张表 SQL + 连接池 + 4 个 Repository 已实现，真实 TiDB 云端连接验证通过 |
 | **认证系统** | ✅ | `server/routes/auth.ts` | JWT + bcrypt，注册/登录/刷新/me 4 个端点 |
@@ -38,7 +38,7 @@ Phase 0+1 已完成，后端核心链路跑通：
 - ✅ 7 节点 Workflow Pipeline（含 Mock/Gemini/DeepSeek 三个 Provider）
 - ✅ POST /api/generate → Content DTO 端到端验证通过
 
-`client/src/` 下的前端代码仍是旧架构骨架（纯前端、localStorage、Mock AI），不可直接用。Phase 2 将从零重构前端：Naive UI + 后端 API 对接。
+`client/src/` 下的前端代码已用 Naive UI 重构，对接后端 API，认证/生成/编辑/管理面板全部可用。
 
 ---
 
@@ -89,12 +89,12 @@ Phase 0+1 已完成，后端核心链路跑通：
 | C1 | `server/index.ts` | 入口 | ✅ Phase 0 |
 | C2 | `server/app.ts` | Express 配置 | ✅ Phase 0 |
 | C3 | `server/routes/auth.ts` | /api/auth/* (4 路由) | ✅ 注册/登录/me/刷新（重置密码待 Phase 2） |
-| C4 | `server/routes/content.ts` | /api/content/* | ❌ Phase 2 |
-| C5 | `server/routes/prompt.ts` | /api/prompt/* | ❌ Phase 2 |
+| C4 | `server/routes/content.ts` | /api/content/* | ✅ 5 路由（列表/详情/保存/更新/删除） |
+| C5 | `server/routes/prompt.ts` | /api/prompt/* | ✅ 6 路由（模板 CRUD + 版本列表） |
 | C6 | `server/routes/generate.ts` | POST /api/generate | ✅ 含认证 + 限流 + 存入 DB |
 | C7 | `server/routes/admin-config.ts` | /api/admin/config/* | ❌ Phase 3 |
 | C8 | `server/middleware/auth.ts` | JWT 验证 | ✅ Bearer Token 守卫 |
-| C9 | `server/middleware/admin-guard.ts` | role=admin | ❌ Phase 3 |
+| C9 | `server/middleware/auth.ts` (adminGuard) | role=admin+ | ✅ 内联在 auth.ts 中 |
 | C10 | `server/middleware/rate-limit.ts` | 限流 | ✅ 登录 5/min + 生成 10/min |
 | C11 | `server/middleware/cors.ts` | CORS | 🔵 已内联到 app.ts（不需要单独文件） |
 | C12 | `server/db/repositories/*` | 4 个 repo | ✅ user/content/prompt/generation |
@@ -124,29 +124,31 @@ Phase 0+1 已完成，后端核心链路跑通：
 
 ---
 
-### E. 前端页面 🔵 (旧骨架存在，需重构)
+### E. 前端页面 ✅
 
-| # | 页面 | 路由 | 旧骨架 | 新需求 |
+| # | 页面 | 路由 | 状态 | 说明 |
 |---|---|---|---|---|
-| E1 | HomePage | `/` | 🔵 含 MockProvider | ❌ 需改为 POST /api/generate |
-| E2 | EditPage | `/edit/:id` | 🔵 含旧导出 | ❌ 需加配图按钮、发布记录、下载 |
-| E3 | HistoryPage | `/history` | 🔵 | ⚠️ 需接后端 API |
-| E4 | PromptPage | `/prompt` | 🔵 | ❌ 需完全重做（后端 CRUD） |
-| E5 | LoginPage | `/login` | ❌ | ❌ 全新 |
-| E6 | SettingsPage | `/settings` | ❌ | ❌ 全新 |
-| E7 | DefaultLayout | — | 🔵 | ⚠️ 需加 Naive UI 组件 |
+| E1 | HomePage | `/` | ✅ | 主题输入 → POST /api/generate |
+| E2 | EditPage | `/edit/:id` | ✅ | 编辑/预览/导出 Content DTO |
+| E3 | HistoryPage | `/history` | ✅ | 对接 GET /api/content |
+| E4 | PromptPage | `/prompt` | ✅ | Prompt 模板 CRUD |
+| E5 | LoginPage | `/login` | ✅ | 登录/注册，含前端校验规则 |
+| E6 | ProfilePage | `/profile` | ✅ | 个人信息编辑 + 角色显示 |
+| E7 | AdminPage | `/admin` | ✅ | 管理面板 5 Tab（用户/内容/生成记录/Prompt模板/Prompt版本） |
+| E8 | DefaultLayout | — | ✅ | Naive UI 导航 + 用户下拉 |
 
-### F. 前端基础设施 ❌
+### F. 前端基础设施 ✅
 
 | # | 项 | 状态 | 说明 |
 |---|---|---|---|
-| F1 | Naive UI 集成 | ❌ | `pnpm add naive-ui` |
-| F2 | `client/src/stores/auth.ts` | ❌ | JWT 管理 + 路由守卫 |
-| F3 | `client/src/utils/api-client.ts` | ❌ | fetch 封装（Authorization头/401刷新） |
-| F4 | `client/src/repositories/http-repository.ts` | ❌ | HttpRepository<T> 实现 |
-| F5 | `client/src/types/index.ts` | 🔵 | 旧类型存在，需对齐 docs/types.md |
-| F6 | `client/src/constants/index.ts` | 🔵 | DEFAULT_MODEL='GPT-5.5' 需更新 |
-| F7 | 前端 Logger | ❌ | loglevel 封装 |
+| F1 | Naive UI 集成 | ✅ | `naive-ui` 2.x + `@vicons/ionicons5` |
+| F2 | `client/src/stores/auth.ts` | ✅ | JWT 管理 + 路由守卫 + 角色判断 |
+| F3 | `client/src/utils/api-client.ts` | ✅ | axios 封装（拦截器/Token/401）+ fetchApi 备用 |
+| F4 | `client/src/repositories/http-repository.ts` | ✅ | HttpRepository<T> CRUD 抽象 |
+| F5 | `client/src/types/index.ts` | ✅ | Content/Page/Title/Cover + UserInfo 类型 |
+| F6 | `client/src/utils/storage.ts` | ✅ | localStorage 封装 |
+| F7 | 前端 Logger（loglevel） | ✅ | ERROR 级自动上报后端 |
+| F8 | 前端校验 | ✅ | LoginPage NForm FormRules，三字段格式+长度 |
 
 ---
 

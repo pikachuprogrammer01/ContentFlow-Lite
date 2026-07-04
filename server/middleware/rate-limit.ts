@@ -3,6 +3,7 @@
  *
  * 登录：5 次/分钟/IP
  * 生成：10 次/分钟/用户
+ * 重置密码：3 次/分钟/管理员用户
  */
 
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
@@ -43,6 +44,28 @@ export const generateLimiter = rateLimit({
     error: {
       code: 'RATE_LIMITED',
       message: '生成请求过于频繁，请 1 分钟后再试',
+    },
+  },
+});
+
+/**
+ * 管理员重置密码限流：3 次/分钟/管理员用户。
+ * 防止管理员账号被盗用后批量重置密码。
+ *
+ * 注意：必须在 authMiddleware 之后使用。
+ */
+export const resetPasswordLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request, _res: Response): string => {
+    return req.user?.userId || ipKeyGenerator(req.ip ?? '', 56);
+  },
+  message: {
+    error: {
+      code: 'RATE_LIMITED',
+      message: '重置密码操作过于频繁，请 1 分钟后再试',
     },
   },
 });

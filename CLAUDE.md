@@ -1,253 +1,104 @@
 # ContentFlow Lite - CLAUDE.md
 
-# 一、系统定位
+## 系统定位
 
-ContentFlow Lite 是一个 AI 内容生成系统，核心基于：
+ContentFlow Lite 是一个基于 Workflow 的结构化 AI 内容生成框架，核心三要素：
 
-- Workflow（流程编排）
-- Prompt Version（提示词版本控制）
-- Content DTO（统一数据结构）
-
----
-
-# 二、Claude 执行原则（最高优先级）
-
-Claude 在本项目中必须遵循：
-
-1. 先读取 .rules/ 下对应模块
-2. 再理解当前任务目标
-3. 再进入实现或修改
-4. 所有输出必须符合 Content DTO
-5. 所有生成必须经过 Workflow 逻辑
+- **Workflow** — 7 节点 Pipeline 流程编排（Input → Prompt → Provider → Parse → Validate → DTO → Output）
+- **Prompt Version** — 提示词版本控制，每次修改生成新版本，不可覆盖
+- **Content DTO** — 统一数据结构，所有 AI 输出必须转换为此格式
 
 ---
 
-# 三、任务路由（逻辑级，不绑定代码）
+## 执行原则（最高优先级）
 
-## 1. Workflow 类任务
-
-读取：
-
-.rules/workflow.mdc
-
-关注内容：
-
-- Workflow 生命周期
-- Node 执行顺序
-- 数据流（Input → Output）
-- 错误处理机制
+1. **先读规则，再动手** — 根据任务类型读取 `.rules/` 下对应模块，理解约束后再编码
+2. **所有生成必须经过 Workflow** — 不允许绕过 Workflow 直接调用 Provider
+3. **所有 AI 输出必须转为 Content DTO** — 系统只能存在一套 Content DTO
+4. **Prompt 修改 = 新版本** — 永远不覆盖已有 Prompt Version
+5. **按职责分层，不跨层** — 路由只做校验 → Repository 只做 CRUD → Provider 只做调用
 
 ---
 
-## 2. Prompt 类任务
+## 规则索引
 
-读取：
+根据任务类型读取对应规则文件（均在 `.rules/` 下）：
 
-.rules/prompt.mdc
+| 任务类型 | 规则文件 | 关键约束 |
+|---------|---------|---------|
+| Workflow / 生成流程 | `workflow.mdc` | 7 节点串行、Validate 重试 ≤3 次、数据流单向 |
+| Prompt / 模板 | `prompt.mdc` | Template 结构、OutputSchema、版本不可覆盖 |
+| 数据结构 / DTO | `architecture.mdc` | Content DTO 唯一定义、Page/Title/Cover 结构 |
+| UI / 前端 | `ui.mdc` | Naive UI 优先、UI 只渲染 DTO、禁止业务逻辑 |
+| 编码规范 | `coding.mdc` | TypeScript 严格模式、Vue Composition API、分层约束 |
+| AI Provider | `provider.mdc` | 用户手动选择 Provider、不自动切换、Key 即用 |
+| 后端 / 数据库 | `backend.mdc` | Express 分层、8 张表、JWT + bcrypt、限流 |
+| 日志 | `logging.mdc` | Winston 5 级日志、禁止 console.log、DB Transport |
+| Phase Gate | `docs/PHASE_GATE.md` | `pnpm phase:advance` 唯一入口、禁手动改 .phase |
 
-关注内容：
-
-- Prompt Template 结构
-- Prompt Builder 规则
-- Prompt Version 管理
-- 不同平台 Prompt 规范
-
----
-
-## 3. 数据结构类任务（DTO）
-
-读取：
-
-.rules/architecture.mdc（Content DTO 部分）
-**docs/types.md（核心类型定义 — FinalPrompt / OutputSchema / Provider 接口等）**
-
-关注内容：
-
-- Content 结构定义
-- Metadata 规范
-- Page / Title / Cover 结构（含 imagePrompt / imageUrl / imageStatus）
-- DTO 唯一性原则
-- FinalPrompt / OutputSchema / AIProvider / ImageProvider / WorkflowNodeType 等所有核心类型
+补充参考：
+- **类型定义** → `docs/types.md`（FinalPrompt / OutputSchema / Provider 接口等）
+- **项目进度** → `PROGRESS.md`（当前 Phase + 待完成任务）
+- **API 文档** → 后端 JSDoc 注释自动生成 Scalar UI（`/api-docs`），不单独维护手写文档
 
 ---
 
-## 4. UI 类任务
+## 系统执行链路
 
-读取：
-
-.rules/ui.mdc
-
-关注内容：
-
-- UI 只负责渲染 DTO，不允许业务逻辑
-- Workflow 调用方式（POST /api/generate → 后端执行 Pipeline）
-- 状态管理规范
-- **组件库：Naive UI** — 优先使用 Naive UI 组件，没有的才自行实现
-
----
-
-## 5. 工程规范类任务
-
-读取：
-
-.rules/coding.mdc
-
-关注内容：
-
-- TypeScript 规范
-- Vue 规范
-- 目录结构原则
-- 分层架构约束
-
----
-
-## 6. AI Provider 类任务
-
-读取：
-
-.rules/provider.mdc
-
-关注内容：
-
-- 默认模型配置（文字/图片）
-- Provider 接口实现规范
-- API Key 管理方式
-- 模型切换与兜底策略
-- 扩展现有 Provider 的规则
-
-文本生成：用户手动选择 Provider（Gemini 2.0 Flash / DeepSeek V4 Flash / 硅基流动 Qwen2.5-72B），不做自动切换。给了哪个 Key 用哪个。
-图片生成默认使用通义万相 2.0。
-
----
-
-## 7. 后端 / 数据库类任务
-
-读取：
-
-.rules/backend.mdc
-
-关注内容：
-
-- Express 后端架构与分层约束
-- MySQL 兼容数据库 — 不绑定平台，支持本地 MySQL / TiDB / MariaDB / PlanetScale / RDS
-- 八张核心表（users / contents / prompt_templates / prompt_versions / generation_records / user_settings / publish_records / app_logs）
-- RESTful API 路由设计（含认证 / 管理接口 / 密码重置 / 限流）
-- JWT 认证系统（登录 / 注册 / Token 刷新 / 路由守卫），Token 存 localStorage + CSP 防 XSS
-- AdminJS 数据库管理面板（仅 admin 可访问）
-- 配置系统（.env + config.json 三层 + Redis API Key 缓存，Redis 可选）
-- 安全规范（bcrypt / rate limit / helmet CSP / CORS / SQL 注入防护 / AES-256-GCM 加密）
-- 限流：登录 5次/分钟/IP + `/api/generate` 10次/分钟/用户
-- 无离线模式（数据库不可用时 App 不可用，不做 localStorage 缓存）
-- 后端禁止含业务逻辑（路由只做校验 → repository 只做 CRUD）
-
-后端使用 Express + AdminJS + Redis（可选），八张 MySQL 兼容表。
-
----
-
-## 8. 日志模块类任务
-
-读取：
-
-.rules/logging.mdc
-
-关注内容：
-
-- 日志级别规范（TRACE/DEBUG/INFO/WARN/ERROR）— 对标 Spring Boot
-- 后端 winston 封装（createLogger + DB Transport + Console Transport）
-- 前端 loglevel 封装（ERROR 发后端，其他输出控制台）
-- 禁止直接 console.log — 必须通过 Logger 模块
-- app_logs 表结构与写入规则
-- 环境变量控制（LOG_LEVEL / LOG_TO_DB / VITE_LOG_LEVEL）
-
-## 9. API 文档类任务
-
-读取：
-
-.rules/backend.mdc（API 文档方案）
-
-关注内容：
-
-- **swagger-jsdoc + @scalar/express-api-reference** — 在路由上写 JSDoc 注释，自动生成 OpenAPI 文档
-- 不单独维护手写 API 文档文件
-- 注释用中文写 summaries/descriptions
-
----
-
-## 10. Phase Gate / 推进流程类任务
-
-读取：
-
-**docs/PHASE_GATE.md**（完整介绍）
-scripts/phase-gate.sh（实现逻辑）
-PROGRESS.md（当前任务状态）
-
-关注内容：
-
-- 当前 Phase 编号（`.phase` 文件）
-- `pnpm phase:status` — 查状态
-- `pnpm phase:advance` — 唯一推进入口
-- 客户端的 pre-commit/pre-push hooks 会触发检查
-- 禁止手动改 .phase、禁止 git push --no-verify 绕过
-- 每完成一个 Milestone 更新 PROGRESS.md
-
----
-
-# 四、系统执行链路（抽象级）
-
-```text
+```
 前端 UI (Vue 3 + Naive UI)
+ ↓  POST /api/generate
+Express 后端 (JWT → Rate Limit → Workflow)
+ ↓  7 节点 Pipeline
+Provider 层 (Gemini 2.0 Flash / DeepSeek V4 Flash)
+ ↓  原始文本
+Parser → Validate (失败重试 ≤3) → Content DTO
  ↓
-POST /api/generate → Express 后端
- ↓
-Workflow (server/workflow/ — 7 节点 Pipeline)
- │  Input → Prompt → Provider → Parse → Validate → DTO → Output
- ↓
-Provider 层 (server/providers/ — 调用 AI SDK)
- ↓
-AI Model (Gemini / DeepSeek / 硅基流动 / 通义万相)
- ↓
-Parser → Content DTO
- ↓
-Export / Storage（后端 MySQL 兼容数据库）
+持久化 (MySQL 兼容 DB) + 返回前端
 ```
 
 ---
 
-# 五、核心约束（非常重要）
+## 硬性约束
 
-Claude 必须始终遵守：
+### 代码边界
 
-## 1. 所有生成行为必须通过 Workflow 概念执行。
+- **前端不处理业务逻辑** — 只负责渲染 DTO 和用户交互
+- **后端路由不含业务逻辑** — 只做参数校验，业务在 Workflow/Service 层
+- **数据库操作走 Repository** — 不允许在路由或 Workflow 中直接写 SQL
+- **Provider 不可绕过** — 所有 AI 调用必须通过 Provider 接口，不做裸调 SDK
+- **原生 API 必须封装** — 浏览器 API（fetch/localStorage）和 Node API（fs/path/crypto）只要超过一处使用，必须封装为统一模块，禁止散落裸调
 
----
+### 数据边界
 
-## 2. AI 输出必须统一转换为 Content DTO。
+- **Content DTO 唯一** — 不存在第二套内容数据结构
+- **Prompt 不可覆盖** — 每次修改生成新的 `prompt_versions` 记录
+- **前后端类型各自维护** — `server/types.ts` 是后端 source of truth，`client/src/types/` 对齐 API 契约
 
----
+### 操作边界
 
-## 3. 系统只能存在一套 Content DTO。
+- **禁止手动改 `.phase`** — Phase 推进必须走 `pnpm phase:advance`
+- **禁止 `git push --no-verify`** — 绕过 pre-push hook 的 push 会被 CI 拦截
+- **禁止 `console.log`** — 必须通过 Logger 模块（前端 `loglevel`，后端 `winston`）
+- **每完成一个 Milestone 更新 `PROGRESS.md`**
 
----
+### 安全边界
 
-## 4. 任何 Prompt 修改必须生成新版本，不允许覆盖。
-
----
-
-# 六、开发指导原则（现实层）
-
-当进入代码实现阶段时，Claude 应遵循：
-
-- 先分析 rules
-- 再确定模块职责
-- 再设计代码结构
-- 最后实现功能
-
----
-
-# 七、系统本质
-
-ContentFlow Lite 的本质是：
-
-> 一个基于 Workflow 的结构化 AI 内容生成框架
+- JWT Token 存 localStorage + helmet CSP 防 XSS
+- 密码 bcrypt (cost=12)，API Key AES-256-GCM 加密存储
+- 限流：登录 5/min/IP，生成 10/min/用户
+- 数据库不可用时 App 不可用（无离线模式，不做 localStorage 缓存）
 
 ---
+
+## 技术栈速览
+
+| 层 | 技术 |
+|----|------|
+| 前端 | Vue 3 + Naive UI + Pinia + Vite（`client/`） |
+| 后端 | Express 5 + TypeScript + tsx（`server/`） |
+| 数据库 | MySQL 兼容（TiDB / MariaDB / PlanetScale）— 8 张表 |
+| 认证 | JWT（jsonwebtoken）+ bcryptjs |
+| AI | Gemini 2.0 Flash / DeepSeek V4 Flash（用户手动选择） |
+| 日志 | Winston（5 级 + DB Transport） |
+| 包管理 | pnpm workspace（`pnpm-workspace.yaml`） |

@@ -653,7 +653,19 @@ repository 不得包含业务逻辑。
 
 **不允许在业务代码中直接调用原生 API 或第三方 SDK。** 必须封装一层适配器。
 
-典型场景：
+#### Node.js 原生 API 封装
+
+| 原生 API | 封装模块 | 强制程度 |
+|---------|---------|---------|
+| `console.log/error/warn` | `server/utils/logger.ts`（createLogger） | 🔴 绝对禁止裸调 |
+| `process.env` | `server/config.ts`（config 对象） | 🔴 绝对禁止裸调 |
+| `mysql2` | `server/db/client.ts` + repositories | 🔴 绝对禁止裸调 |
+| `crypto` | `server/utils/crypto.ts`（AES-256-GCM） | 🔴 绝对禁止裸调 |
+| `fs` / `fs/promises` | 需要时封装为 `file-utils.ts` | 🟡 超过一处使用必须封装 |
+| `path` | 需要时封装为 `path-utils.ts` | 🟡 超过一处使用必须封装 |
+| `child_process` | 禁止在业务代码中使用 | 🔴 如有需求走封装 |
+
+#### 第三方 SDK 封装
 
 | ❌ 禁止 | ✅ 正确 |
 |---|---|
@@ -662,12 +674,8 @@ repository 不得包含业务逻辑。
 | routes 中 `import Redis from 'ioredis'` 直接读写 | 通过 `db/api-key-store.ts` 封装 |
 | 任意位置直接 `console.log()` | 通过 Logger 模块输出 |
 
-原因：
-- 第三方库升级/替换时，只改封装层，不影响业务代码
-- 统一错误处理（如 OpenAI 错误 → 转为 WorkflowError）
-- 集中管理配置（baseURL、timeout、retry）
-
-封装层命名约定：`server/utils/` 或 `server/db/` 下的模块，对外暴露语义化函数签名，隐藏底层实现。
+**原因**：第三方库升级/替换只改封装层；统一错误处理；集中管理配置。
+**命名**：封装层放在 `server/utils/` 或 `server/db/`，对外暴露语义化函数签名，隐藏底层实现。
 
 ### 9.3 错误处理
 

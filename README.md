@@ -118,12 +118,13 @@ ContentFlow-Lite/
 │   │   │   ├── PromptPage.vue  # Prompt 模板管理
 │   │   │   ├── LoginPage.vue   # 登录/注册
 │   │   │   ├── ProfilePage.vue # 个人设置
-│   │   │   └── AdminPage.vue   # 管理面板（admin+）
+│   │   │   └── AdminPage.vue   # 管理面板（5 Tab：用户/内容/生成记录/Prompt模板/版本）
 │   │   ├── components/         # 通用组件
 │   │   ├── stores/             # Pinia 状态管理
 │   │   ├── services/           # API 调用封装
 │   │   ├── router/             # Vue Router
-│   │   └── types/              # 前端类型定义
+│   │   ├── types/              # 前端类型定义
+│   │   └── utils/              # 前端工具（api-client, storage 等）
 │   └── public/                 # 静态资源
 │
 ├── server/                     # 后端（Express + TypeScript）
@@ -133,6 +134,7 @@ ContentFlow-Lite/
 │   ├── app.ts                  # Express 应用装配
 │   ├── config.ts               # 配置加载（.env + config.json）
 │   ├── types.ts                # 全局类型定义
+│   ├── env.ts                  # 环境变量加载（优先 server/.env）
 │   ├── routes/                 # API 路由
 │   │   ├── auth.ts             # /api/auth/* 认证
 │   │   ├── generate.ts         # POST /api/generate 生成
@@ -158,7 +160,7 @@ ContentFlow-Lite/
 │   │   ├── reset-super-admin.ts
 │   │   ├── promote-admin.ts
 │   │   └── migrate-role-enum.ts
-│   └── utils/                  # 工具（logger 等）
+│   └── utils/                  # 工具（logger, validate 等）
 │
 ├── docs/                       # 项目文档（PRD/SPEC/types/PHASE_GATE）
 ├── scripts/                    # Phase Gate 脚本 + Git hooks
@@ -217,10 +219,26 @@ Input → Prompt → Provider → Parse → Validate → DTO → Output
 | GET | `/api/content` | JWT | — | 获取内容列表 |
 | GET | `/api/content/:id` | JWT | — | 获取单个内容 |
 | DELETE | `/api/content/:id` | JWT | — | 删除内容 |
-| GET | `/api/prompt` | JWT | — | Prompt 模板列表 |
-| POST | `/api/prompt` | JWT | — | 创建模板 |
+| GET | `/api/prompt/templates` | JWT | — | Prompt 模板列表 |
+| POST | `/api/prompt/templates` | JWT | — | 创建 Prompt 模板 |
+| GET | `/api/prompt/templates/:id` | JWT | — | Prompt 模板详情 |
+| PUT | `/api/prompt/templates/:id` | JWT | — | 更新 Prompt 模板 |
+| DELETE | `/api/prompt/templates/:id` | JWT | — | 删除 Prompt 模板 |
+| GET | `/api/prompt/versions/:promptId` | JWT | — | Prompt 版本列表 |
 | GET | `/api/admin/users` | admin+ | — | 管理面板 - 用户列表 |
 | PUT | `/api/admin/users/:id` | admin+ | — | 管理面板 - 修改用户 |
+| DELETE | `/api/admin/users/:id` | admin+ | — | 管理面板 - 删除用户 |
+| POST | `/api/admin/users/:id/reset-password` | admin+ | 3/min/管理员 | 管理面板 - 重置密码 |
+| GET | `/api/admin/contents` | admin+ | — | 管理面板 - 内容列表 |
+| DELETE | `/api/admin/contents/:id` | admin+ | — | 管理面板 - 删除内容 |
+| GET | `/api/admin/generation-records` | admin+ | — | 管理面板 - 生成记录 |
+| GET | `/api/admin/prompt-templates` | admin+ | — | 管理面板 - Prompt 模板列表 |
+| DELETE | `/api/admin/prompt-templates/:id` | admin+ | — | 管理面板 - 删除 Prompt 模板 |
+| GET | `/api/admin/prompt-versions` | admin+ | — | 管理面板 - Prompt 版本列表 |
+| POST | `/api/admin/contents/batch-delete` | super_admin | — | 管理面板 - 批量删除内容 |
+| POST | `/api/admin/generation-records/batch-delete` | super_admin | — | 管理面板 - 批量删除生成记录 |
+| POST | `/api/admin/generation-records/clear` | super_admin | — | 管理面板 - 清空生成记录 |
+| POST | `/api/admin/prompt-templates/batch-delete` | super_admin | — | 管理面板 - 批量删除 Prompt 模板 |
 
 ---
 
@@ -347,6 +365,8 @@ MVP 阶段 Workflow 固定为 7 节点 Pipeline，减少复杂度。每个节点
 - UI 只负责渲染 DTO，不允许业务逻辑
 - 后端路由只做校验，Repository 只做 CRUD
 - 禁止直接 `console.log`，必须通过 Logger 模块
+- 原生 API 超过一处使用必须封装（fetch → api-client/axios，localStorage → storage，process.env → config）
+- 不相信前端输入 — 后端独立校验所有用户输入（`server/utils/validate.ts`）
 - 所有 API 注释使用 JSDoc，自动生成 OpenAPI 文档
 - 代码风格统一，请遵循 `.rules/` 目录下的规范
 

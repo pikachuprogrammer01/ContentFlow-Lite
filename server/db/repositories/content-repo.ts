@@ -101,3 +101,39 @@ export async function remove(id: string): Promise<void> {
   const pool = getPool();
   await pool.query('DELETE FROM contents WHERE id = ?', [id]);
 }
+
+/**
+ * [ADMIN] 获取所有内容列表（跨用户，按创建时间倒序，分页）。
+ */
+export async function listAll(limit = 20, offset = 0): Promise<(Content & { userId: string })[]> {
+  const pool = getPool();
+  const [rows] = await pool.query<import('mysql2/promise').RowDataPacket[]>(
+    'SELECT * FROM contents ORDER BY created_at DESC LIMIT ? OFFSET ?',
+    [limit, offset],
+  );
+  return rows.map((r) => {
+    const c = rowToContent(r as unknown as ContentRow);
+    return { ...c, userId: (r as any).user_id as string };
+  });
+}
+
+/**
+ * [ADMIN] 统计内容总数。
+ */
+export async function countAll(): Promise<number> {
+  const pool = getPool();
+  const [rows] = await pool.query<import('mysql2/promise').RowDataPacket[]>(
+    'SELECT COUNT(*) as cnt FROM contents',
+  );
+  return rows[0].cnt as number;
+}
+
+/**
+ * [SUPER_ADMIN] 批量删除内容。
+ */
+export async function batchRemove(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const pool = getPool();
+  const placeholders = ids.map(() => '?').join(',');
+  await pool.query(`DELETE FROM contents WHERE id IN (${placeholders})`, ids);
+}

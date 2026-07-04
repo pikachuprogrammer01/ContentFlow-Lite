@@ -34,6 +34,15 @@ const saving = ref(false);
 const editUsername = ref('');
 const editEmail = ref('');
 
+function roleLabel(role: string): string {
+  const map: Record<string, string> = {
+    super_admin: '超级管理员',
+    admin: '管理员',
+    user: '普通用户',
+  };
+  return map[role] || role;
+}
+
 function startEdit(): void {
   editUsername.value = auth.user?.username || '';
   editEmail.value = auth.user?.email || '';
@@ -100,7 +109,7 @@ function handleLogout(): void {
           </NAvatar>
           <div class="avatar-info">
             <h3 v-if="!editing">{{ auth.user?.username }}</h3>
-            <span class="role-badge">{{ auth.user?.role === 'admin' ? '管理员' : '普通用户' }}</span>
+            <span class="role-badge">{{ roleLabel(auth.user?.role || 'user') }}</span>
           </div>
         </div>
 
@@ -108,10 +117,14 @@ function handleLogout(): void {
 
         <!-- 编辑模式 -->
         <template v-if="editing">
-          <NSpace vertical>
-            <NInput v-model:value="editUsername" placeholder="用户名" />
-            <NInput v-model:value="editEmail" placeholder="邮箱" />
-          </NSpace>
+          <div class="edit-row">
+            <span class="edit-label">用户名</span>
+            <NInput v-model:value="editUsername" />
+          </div>
+          <div class="edit-row">
+            <span class="edit-label">邮　箱</span>
+            <NInput v-model:value="editEmail" />
+          </div>
           <NSpace justify="end" style="margin-top: 16px">
             <NButton @click="cancelEdit">取消</NButton>
             <NButton type="primary" :loading="saving" @click="saveProfile">保存</NButton>
@@ -128,7 +141,7 @@ function handleLogout(): void {
               {{ auth.user?.email }}
             </NDescriptionsItem>
             <NDescriptionsItem label="角色">
-              {{ auth.user?.role === 'admin' ? '管理员' : '普通用户' }}
+              {{ roleLabel(auth.user?.role || 'user') }}
             </NDescriptionsItem>
             <NDescriptionsItem label="注册时间">
               {{ auth.user?.createdAt ? new Date(auth.user.createdAt).toLocaleString() : '—' }}

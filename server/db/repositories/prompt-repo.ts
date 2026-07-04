@@ -158,3 +158,62 @@ export function buildFinalPrompt(
     userPrompt,
   };
 }
+
+// ── [ADMIN] 跨用户查询 ─────────────────────────────────
+
+/**
+ * [ADMIN] 获取所有 Prompt 模板列表（跨用户，分页）。
+ */
+export async function listAllTemplates(limit = 20, offset = 0): Promise<PromptTemplateRow[]> {
+  const pool = getPool();
+  const [rows] = await pool.query<import('mysql2/promise').RowDataPacket[]>(
+    'SELECT * FROM prompt_templates ORDER BY updated_at DESC LIMIT ? OFFSET ?',
+    [limit, offset],
+  );
+  return rows as PromptTemplateRow[];
+}
+
+/**
+ * [ADMIN] 统计 Prompt 模板总数。
+ */
+export async function countAllTemplates(): Promise<number> {
+  const pool = getPool();
+  const [rows] = await pool.query<import('mysql2/promise').RowDataPacket[]>(
+    'SELECT COUNT(*) as cnt FROM prompt_templates',
+  );
+  return rows[0].cnt as number;
+}
+
+/**
+ * [ADMIN] 获取所有 Prompt 版本列表（跨模板，分页）。
+ */
+export async function listAllVersions(limit = 20, offset = 0): Promise<import('mysql2/promise').RowDataPacket[]> {
+  const pool = getPool();
+  const [rows] = await pool.query<import('mysql2/promise').RowDataPacket[]>(
+    'SELECT pv.*, pt.name as template_name, pt.platform FROM prompt_versions pv LEFT JOIN prompt_templates pt ON pv.prompt_id = pt.id ORDER BY pv.created_at DESC LIMIT ? OFFSET ?',
+    [limit, offset],
+  );
+  return rows;
+}
+
+/**
+ * [ADMIN] 统计 Prompt 版本总数。
+ */
+export async function countAllVersions(): Promise<number> {
+  const pool = getPool();
+  const [rows] = await pool.query<import('mysql2/promise').RowDataPacket[]>(
+    'SELECT COUNT(*) as cnt FROM prompt_versions',
+  );
+  return rows[0].cnt as number;
+}
+
+/**
+ * [SUPER_ADMIN] 批量删除 Prompt 模板（级联删除版本快照）。
+ */
+export async function batchDeleteTemplates(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const pool = getPool();
+  const placeholders = ids.map(() => '?').join(',');
+  await pool.query(`DELETE FROM prompt_versions WHERE prompt_id IN (${placeholders})`, ids);
+  await pool.query(`DELETE FROM prompt_templates WHERE id IN (${placeholders})`, ids);
+}

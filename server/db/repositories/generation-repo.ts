@@ -53,3 +53,44 @@ export async function listByUser(
   );
   return rows as GenerationRow[];
 }
+
+/**
+ * [ADMIN] 获取所有生成记录列表（跨用户，按创建时间倒序，分页）。
+ */
+export async function listAll(limit = 20, offset = 0): Promise<GenerationRow[]> {
+  const pool = getPool();
+  const [rows] = await pool.query<import('mysql2/promise').RowDataPacket[]>(
+    'SELECT * FROM generation_records ORDER BY created_at DESC LIMIT ? OFFSET ?',
+    [limit, offset],
+  );
+  return rows as GenerationRow[];
+}
+
+/**
+ * [ADMIN] 统计生成记录总数。
+ */
+export async function countAll(): Promise<number> {
+  const pool = getPool();
+  const [rows] = await pool.query<import('mysql2/promise').RowDataPacket[]>(
+    'SELECT COUNT(*) as cnt FROM generation_records',
+  );
+  return rows[0].cnt as number;
+}
+
+/**
+ * [SUPER_ADMIN] 批量删除生成记录。
+ */
+export async function batchRemove(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const pool = getPool();
+  const placeholders = ids.map(() => '?').join(',');
+  await pool.query(`DELETE FROM generation_records WHERE id IN (${placeholders})`, ids);
+}
+
+/**
+ * [SUPER_ADMIN] 清空全部生成记录。
+ */
+export async function clearAll(): Promise<void> {
+  const pool = getPool();
+  await pool.query('DELETE FROM generation_records');
+}

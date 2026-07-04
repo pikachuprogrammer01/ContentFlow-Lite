@@ -28,7 +28,7 @@ const menuOptions = computed<MenuOption[]>(() => {
     { label: '历史', key: 'history' },
     { label: 'Prompt', key: 'prompt' },
   ];
-  if (auth.user?.role === 'admin') {
+  if (auth.user?.role === 'admin' || auth.user?.role === 'super_admin') {
     items.push({ label: '管理', key: 'admin' });
   }
   return items;

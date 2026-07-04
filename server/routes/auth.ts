@@ -18,6 +18,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { loginLimiter } from '../middleware/rate-limit.js';
 import * as userRepo from '../db/repositories/user-repo.js';
 import { createLogger } from '../utils/logger.js';
+import { validateRegisterInput, validateLoginInput, validateProfileInput } from '../utils/validate.js';
 
 const log = createLogger('routes/auth');
 
@@ -34,32 +35,18 @@ export function createAuthRouter(): Router {
   // ── POST /api/auth/register ────────────────────────────
   router.post('/register', async (req: Request, res: Response) => {
     try {
-      const { username, password, email } = req.body;
-
-      // 参数校验
-      if (!username || !password || !email) {
+      const result = validateRegisterInput(req.body);
+      if (!result.valid) {
         res.status(400).json({
-          error: { code: 'INPUT_ERROR', message: 'username、password、email 不能为空' },
+          error: { code: 'INPUT_ERROR', message: result.errors[0].message, errors: result.errors },
         });
         return;
       }
 
-      if (typeof username !== 'string' || username.trim().length < 2) {
-        res.status(400).json({
-          error: { code: 'INPUT_ERROR', message: '用户名至少 2 个字符' },
-        });
-        return;
-      }
-
-      if (typeof password !== 'string' || password.length < 6) {
-        res.status(400).json({
-          error: { code: 'INPUT_ERROR', message: '密码至少 6 个字符' },
-        });
-        return;
-      }
+      const { username, password, email, adminKey } = result.values;
 
       // 检查用户名/邮箱唯一性
-      const existingUser = await userRepo.findByUsername(username.trim());
+      const existingUser = await userRepo.findByUsername(username);
       if (existingUser) {
         res.status(409).json({
           error: { code: 'CONFLICT', message: '用户名已被注册' },
@@ -67,7 +54,7 @@ export function createAuthRouter(): Router {
         return;
       }
 
-      const existingEmail = await userRepo.findByEmail(email.trim().toLowerCase());
+      const existingEmail = await userRepo.findByEmail(email);
       if (existingEmail) {
         res.status(409).json({
           error: { code: 'CONFLICT', message: '邮箱已被注册' },
@@ -83,29 +70,23 @@ export function createAuthRouter(): Router {
       // 2. 数据库中没有用户（首次安装） → admin
       // 3. 其他 → 普通用户
       // 注：super_admin 只能由系统初始化创建，不可通过注册获得
-      const adminKey = config.admin.setupKey;
-      const isAdmin = !!(req.body.adminKey && adminKey && req.body.adminKey === adminKey);
+      const setupKey = config.admin.setupKey;
+      const isAdmin = !!(adminKey && setupKey && adminKey === setupKey);
       const userCount = await userRepo.countAll();
       const role: 'super_admin' | 'admin' | 'user' =
         isAdmin || userCount === 0 ? 'admin' : 'user';
 
       // 创建用户
       const userId = randomUUID();
-      await userRepo.create({
-        id: userId,
-        username: username.trim(),
-        email: email.trim().toLowerCase(),
-        passwordHash,
-        role,
-      });
+      await userRepo.create({ id: userId, username, email, passwordHash, role });
 
-      // 生成 Token（用实际 role，不是硬编码 'user'）
+      // 生成 Token
       const accessToken = generateToken(userId, role);
 
-      log.info('用户注册成功', { username: username.trim() });
+      log.info('用户注册成功', { username });
 
       res.status(201).json({
-        user: { id: userId, username: username.trim(), email: email.trim().toLowerCase(), role },
+        user: { id: userId, username, email, role },
         accessToken,
       });
     } catch (err) {
@@ -119,20 +100,21 @@ export function createAuthRouter(): Router {
   // ── POST /api/auth/login ───────────────────────────────
   router.post('/login', loginLimiter, async (req: Request, res: Response) => {
     try {
-      const { username, password } = req.body;
-
-      if (!username || !password) {
+      const result = validateLoginInput(req.body);
+      if (!result.valid) {
         res.status(400).json({
-          error: { code: 'INPUT_ERROR', message: '用户名和密码不能为空' },
+          error: { code: 'INPUT_ERROR', message: result.errors[0].message, errors: result.errors },
         });
         return;
       }
+
+      const { username, password } = result.values;
 
       // 查找用户
       const user = await userRepo.findByUsername(username);
       if (!user) {
         res.status(401).json({
-          error: { code: 'UNAUTHORIZED', message: '用户名或密码错误' },
+          error: { code: 'UNAUTHORIZED', message: '该用户不存在！' },
         });
         return;
       }
@@ -202,22 +184,20 @@ export function createAuthRouter(): Router {
   router.put('/me', authMiddleware, async (req: Request, res: Response) => {
     try {
       const userId = req.user!.userId;
-      const { username, email } = req.body;
-
-      const fields: { username?: string; email?: string } = {};
-      if (username !== undefined) fields.username = username;
-      if (email !== undefined) fields.email = email;
-
-      if (Object.keys(fields).length === 0) {
+      const result = validateProfileInput(req.body);
+      if (!result.valid) {
         res.status(400).json({
-          error: { code: 'INPUT_ERROR', message: '至少需要提供 username 或 email' },
+          error: { code: 'INPUT_ERROR', message: result.errors[0].message, errors: result.errors },
         });
         return;
       }
 
+      const fields: { username?: string; email?: string } = {};
+      if (result.values.username !== undefined) fields.username = result.values.username;
+      if (result.values.email !== undefined) fields.email = result.values.email;
+
       await userRepo.updateProfile(userId, fields);
 
-      // 返回更新后的用户信息
       const user = await userRepo.findById(userId);
       res.json({
         user: {
