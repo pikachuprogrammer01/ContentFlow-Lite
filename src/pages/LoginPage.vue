@@ -36,7 +36,9 @@ const registerForm = reactive({
   email: '',
   password: '',
   confirmPassword: '',
+  adminKey: '',
 });
+const showAdminKey = ref(false);
 
 // ── 方法 ──────────────────────────────────────────────
 
@@ -161,6 +163,24 @@ async function handleRegister(): Promise<void> {
                 :disabled="loading"
                 show-password-on="click"
                 @keyup.enter="handleRegister"
+              />
+            </NFormItem>
+            <NButton
+              text
+              size="tiny"
+              type="info"
+              style="margin-bottom: 12px"
+              @click="showAdminKey = !showAdminKey"
+            >
+              {{ showAdminKey ? '收起' : '管理员注册' }}
+            </NButton>
+            <NFormItem v-if="showAdminKey" label="管理员密钥">
+              <NInput
+                v-model:value="registerForm.adminKey"
+                type="password"
+                placeholder="输入管理员注册密钥"
+                :disabled="loading"
+                show-password-on="click"
               />
             </NFormItem>
             <NButton

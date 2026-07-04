@@ -66,6 +66,8 @@ export const config = {
     email: process.env.ADMIN_EMAIL || '',
     passwordHash: process.env.ADMIN_PASSWORD_HASH || '',
     cookieSecret: process.env.ADMIN_COOKIE_SECRET || 'admin-cookie-secret-change-me',
+    /** 管理员注册密钥。注册时传 adminKey 与此一致则获得 admin 角色 */
+    setupKey: process.env.ADMIN_SETUP_KEY || 'admin-setup-key-change-me',
   },
 
   redis: {

@@ -78,9 +78,14 @@ export function createAuthRouter(): Router {
       // 哈希密码
       const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
 
-      // 第一个注册的用户自动成为管理员
+      // 确定角色：
+      // 1. 提供了正确的管理员注册密钥 → admin
+      // 2. 数据库中没有用户（首次安装） → admin
+      // 3. 其他 → 普通用户
+      const setupKey = config.admin?.setupKey;
+      const useSetupKey = req.body.adminKey && setupKey && req.body.adminKey === setupKey;
       const userCount = await userRepo.countAll();
-      const role = userCount === 0 ? 'admin' : 'user';
+      const role = (useSetupKey || userCount === 0) ? 'admin' : 'user';
 
       // 创建用户
       const userId = randomUUID();
@@ -92,8 +97,8 @@ export function createAuthRouter(): Router {
         role,
       });
 
-      // 生成 Token
-      const accessToken = generateToken(userId, 'user');
+      // 生成 Token（用实际 role，不是硬编码 'user'）
+      const accessToken = generateToken(userId, role);
 
       log.info('用户注册成功', { username: username.trim() });
 

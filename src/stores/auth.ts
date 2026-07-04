@@ -42,10 +42,13 @@ export const useAuthStore = defineStore('auth', () => {
     username: string,
     password: string,
     email: string,
+    adminKey?: string,
   ): Promise<void> {
+    const body: Record<string, string> = { username, password, email };
+    if (adminKey) body.adminKey = adminKey;
     const res = await api.post<{ user: UserInfo; accessToken: string }>(
       '/api/auth/register',
-      { username, password, email },
+      body,
     );
     token.value = res.accessToken;
     user.value = res.user;
