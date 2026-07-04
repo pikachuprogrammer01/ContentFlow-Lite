@@ -1,16 +1,24 @@
 <script setup lang="ts">
 /**
- * 编辑页 — 查看和编辑生成的内容
+ * EditPage — 查看和编辑生成的内容
  *
- * 职责：展示 Content DTO，允许编辑标题/正文/标签，提供导出
- * 禁止：调用 AI / 拼接 Prompt / 直接操作 Storage
+ * 职责：展示 Content DTO，允许编辑标题/正文/标签，提供导出和保存
+ * 禁止：调用 AI / 拼接 Prompt
  */
 
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import {
+  NButton,
+  NInput,
+  NTag,
+  NSelect,
+  NSpace,
+  NCard,
+  NDivider,
+} from 'naive-ui';
 import { useContentStore } from '@/stores/content';
 import { exportContent } from '@/exporter';
-import { contentRepository } from '@/repositories';
 import type { ExportFormat } from '@/types';
 import DefaultLayout from '@/layouts/DefaultLayout.vue';
 
@@ -19,8 +27,13 @@ const router = useRouter();
 const store = useContentStore();
 
 const activeExportFormat = ref<ExportFormat>('markdown');
-const exportPreview = ref('');
 const newTag = ref('');
+const saving = ref(false);
+
+const exportFormatOptions = [
+  { label: 'Markdown', value: 'markdown' },
+  { label: 'JSON', value: 'json' },
+] as const;
 
 function addTag(): void {
   const tag = newTag.value.trim();
@@ -33,7 +46,7 @@ function addTag(): void {
 onMounted(async () => {
   const id = route.params.id as string | undefined;
   if (id) {
-    const saved = await contentRepository.get(id);
+    const saved = await store.loadContent(id);
     if (saved) {
       store.updateContent(saved);
     } else {
@@ -44,14 +57,27 @@ onMounted(async () => {
   }
 });
 
+async function handleSave(): Promise<void> {
+  saving.value = true;
+  try {
+    await store.saveContent(store.currentContent);
+  } finally {
+    saving.value = false;
+  }
+}
+
 function handleExport(): void {
-  const result = exportContent(store.currentContent, activeExportFormat.value);
-  exportPreview.value = result;
+  exportContent(store.currentContent, activeExportFormat.value);
+
+  const content = store.currentContent;
+  const topic = content.topic || 'content';
 
   if (activeExportFormat.value === 'markdown') {
-    downloadFile(result, `${store.currentContent.topic || 'content'}.md`, 'text/markdown');
+    const result = exportContent(content, 'markdown');
+    downloadFile(result, `${topic}.md`, 'text/markdown');
   } else {
-    downloadFile(result, `${store.currentContent.topic || 'content'}.json`, 'application/json');
+    const result = exportContent(content, 'json');
+    downloadFile(result, `${topic}.json`, 'application/json');
   }
 }
 
@@ -65,10 +91,9 @@ function downloadFile(content: string, filename: string, mimeType: string): void
   URL.revokeObjectURL(url);
 }
 
-function handleRegenerate(): void {
-  store.regenerate();
+async function handleRegenerate(): Promise<void> {
+  await store.regenerate('mock');
 }
-
 </script>
 
 <template>
@@ -83,131 +108,139 @@ function handleRegenerate(): void {
 
         <section class="section">
           <h3>标题 ({{ store.currentContent.titles.length }})</h3>
-          <ul class="title-list">
-            <li
+          <NSpace vertical>
+            <NInput
               v-for="title in store.currentContent.titles"
               :key="title.id"
-              class="title-item"
-            >
-              <input
-                v-model="title.text"
-                type="text"
-                class="title-input"
-              />
-            </li>
-          </ul>
+              :value="title.text"
+              @update:value="(v: string) => (title.text = v)"
+            />
+          </NSpace>
         </section>
 
         <section class="section">
           <h3>封面</h3>
-          <div class="cover-edit">
-            <input
-              v-model="store.currentContent.cover.title"
-              type="text"
+          <NSpace vertical>
+            <NInput
+              :value="store.currentContent.cover.title"
               placeholder="封面标题"
-              class="cover-input"
+              @update:value="(v: string) => (store.currentContent.cover.title = v)"
             />
-            <input
-              v-model="store.currentContent.cover.subtitle"
-              type="text"
+            <NInput
+              :value="store.currentContent.cover.subtitle"
               placeholder="封面副标题"
-              class="cover-input"
+              @update:value="(v: string) => (store.currentContent.cover.subtitle = v)"
             />
-          </div>
+          </NSpace>
         </section>
 
         <section class="section">
           <h3>正文 ({{ store.currentContent.pages.length }} 页)</h3>
-          <div
+          <NCard
             v-for="(page, index) in store.currentContent.pages"
             :key="page.id"
-            class="page-edit"
+            size="small"
+            :title="`第 ${index + 1} 页`"
+            class="page-card"
           >
-            <div class="page-header">
-              <span class="page-number">第 {{ index + 1 }} 页</span>
-              <input
-                v-model="page.title"
-                type="text"
+            <NSpace vertical>
+              <NInput
+                :value="page.title"
                 placeholder="页面标题"
-                class="page-title-input"
+                @update:value="(v: string) => (page.title = v)"
               />
-            </div>
-            <textarea
-              v-model="page.content"
-              rows="4"
-              placeholder="页面正文"
-              class="page-content-input"
-            />
-          </div>
+              <NInput
+                :value="page.content"
+                type="textarea"
+                placeholder="页面正文"
+                :autosize="{ minRows: 4, maxRows: 10 }"
+                @update:value="(v: string) => (page.content = v)"
+              />
+            </NSpace>
+          </NCard>
         </section>
 
         <section class="section">
           <h3>标签</h3>
-          <div class="tags-edit">
-            <span
+          <NSpace>
+            <NTag
               v-for="(tag, index) in store.currentContent.tags"
               :key="index"
-              class="tag-chip"
+              closable
+              @close="store.currentContent.tags.splice(index, 1)"
             >
               #{{ tag }}
-              <button class="tag-remove" @click="store.currentContent.tags.splice(index, 1)">×</button>
-            </span>
-            <input
-              v-model="newTag"
-              type="text"
+            </NTag>
+            <NInput
+              v-model:value="newTag"
               placeholder="添加标签..."
-              class="tag-add-input"
+              size="small"
+              style="width: 120px"
               @keyup.enter="addTag"
             />
-          </div>
+          </NSpace>
         </section>
       </div>
 
       <!-- 右侧：操作区 -->
       <aside class="edit-sidebar">
-        <div class="sidebar-card">
-          <h4>导出</h4>
-          <select v-model="activeExportFormat" class="export-select">
-            <option value="markdown">Markdown</option>
-            <option value="json">JSON</option>
-          </select>
-          <button class="btn-export" @click="handleExport">
-            导出 {{ activeExportFormat === 'markdown' ? 'Markdown' : 'JSON' }}
-          </button>
-        </div>
+        <NCard title="导出" size="small">
+          <NSpace vertical>
+            <NSelect
+              v-model:value="activeExportFormat"
+              :options="exportFormatOptions"
+            />
+            <NButton type="success" block @click="handleExport">
+              导出 {{ activeExportFormat === 'markdown' ? 'Markdown' : 'JSON' }}
+            </NButton>
+          </NSpace>
+        </NCard>
 
-        <div class="sidebar-card">
-          <h4>操作</h4>
-          <button class="btn-secondary" @click="handleRegenerate" :disabled="store.loading">
-            重新生成
-          </button>
-          <button class="btn-secondary" @click="router.push('/')">
-            新建内容
-          </button>
-        </div>
+        <NCard title="操作" size="small">
+          <NSpace vertical>
+            <NButton
+              type="primary"
+              block
+              :loading="saving"
+              @click="handleSave"
+            >
+              保存到云端
+            </NButton>
+            <NButton
+              block
+              :disabled="store.loading"
+              @click="handleRegenerate"
+            >
+              重新生成
+            </NButton>
+            <NButton block @click="router.push('/')">
+              新建内容
+            </NButton>
+          </NSpace>
+        </NCard>
 
-        <div class="sidebar-card">
-          <h4>信息</h4>
+        <NCard title="信息" size="small">
           <dl class="meta-list">
             <dt>Prompt</dt>
             <dd>{{ store.currentContent.metadata.promptId }}@{{ store.currentContent.metadata.promptVersion }}</dd>
             <dt>平台</dt>
             <dd>{{ store.currentContent.platform }}</dd>
+            <dt>模型</dt>
+            <dd>{{ store.currentContent.metadata.model }}</dd>
             <dt>生成时间</dt>
             <dd>{{ new Date(store.currentContent.metadata.createdAt).toLocaleString() }}</dd>
           </dl>
-        </div>
+        </NCard>
       </aside>
     </div>
 
     <!-- Empty 状态 -->
-    <div v-else-if="!store.loading" class="empty-state">
+    <div v-else class="empty-state">
       <p>暂无内容</p>
       <router-link to="/">去生成内容 →</router-link>
     </div>
   </DefaultLayout>
 </template>
-
 
 <style scoped>
 .edit-page {
@@ -242,130 +275,8 @@ function handleRegenerate(): void {
   border-radius: 6px;
 }
 
-.title-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.title-item {
-  margin: 0;
-}
-
-.title-input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  font-size: 14px;
-  color: #111827;
-  background: #ffffff;
-  box-sizing: border-box;
-}
-
-.cover-edit {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.cover-input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  font-size: 14px;
-  color: #111827;
-  box-sizing: border-box;
-}
-
-.page-edit {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 14px;
+.page-card {
   margin-bottom: 12px;
-}
-
-.page-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.page-number {
-  font-size: 12px;
-  font-weight: 600;
-  color: #6b7280;
-  white-space: nowrap;
-}
-
-.page-title-input {
-  flex: 1;
-  padding: 6px 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #111827;
-}
-
-.page-content-input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
-  color: #374151;
-  resize: vertical;
-  font-family: inherit;
-  box-sizing: border-box;
-}
-
-.tags-edit {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-
-.tag-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: #eff6ff;
-  color: #2563eb;
-  font-size: 13px;
-  padding: 4px 10px;
-  border-radius: 20px;
-}
-
-.tag-remove {
-  background: none;
-  border: none;
-  color: #93c5fd;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 0;
-  line-height: 1;
-}
-
-.tag-remove:hover {
-  color: #dc2626;
-}
-
-.tag-add-input {
-  border: 1px dashed #d1d5db;
-  border-radius: 20px;
-  padding: 4px 12px;
-  font-size: 13px;
-  color: #6b7280;
-  min-width: 100px;
-  flex: 1;
 }
 
 /* Sidebar */
@@ -375,67 +286,6 @@ function handleRegenerate(): void {
   gap: 16px;
   position: sticky;
   top: 80px;
-}
-
-.sidebar-card {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 16px;
-}
-
-.sidebar-card h4 {
-  font-size: 14px;
-  font-weight: 600;
-  color: #111827;
-  margin: 0 0 12px;
-}
-
-.export-select {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
-  margin-bottom: 10px;
-}
-
-.btn-export {
-  width: 100%;
-  padding: 10px;
-  background: #10b981;
-  color: #ffffff;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-export:hover {
-  background: #059669;
-}
-
-.btn-secondary {
-  width: 100%;
-  padding: 10px;
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  margin-bottom: 8px;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: #e5e7eb;
-}
-
-.btn-secondary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .meta-list {

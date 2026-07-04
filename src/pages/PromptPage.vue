@@ -1,27 +1,65 @@
 <script setup lang="ts">
 /**
- * Prompt 管理页 — 查看 Prompt Template 和 Version
+ * PromptPage — 查看 Prompt Template 和版本历史
+ *
+ * 通过 api-client 对接后端 /api/prompt/*。
  */
 
 import { ref, onMounted } from 'vue';
-import { listTemplates } from '@/prompt/template';
-import { listPromptVersions } from '@/prompt/version';
-import type { PromptTemplate, PromptVersion } from '@/types';
+import {
+  NCard,
+  NTag,
+  NButton,
+  NSpin,
+  NEmpty,
+  NSpace,
+  NCollapse,
+  NCollapseItem,
+} from 'naive-ui';
+import { api } from '@/utils/api-client';
 import DefaultLayout from '@/layouts/DefaultLayout.vue';
 
-const templates = ref<PromptTemplate[]>([]);
-const versions = ref<PromptVersion[]>([]);
+interface TemplateItem {
+  id: string;
+  name: string;
+  platform: string;
+  type: string;
+  is_default: number;
+  created_at: string;
+}
+
+interface VersionItem {
+  id: string;
+  prompt_id: string;
+  version: string;
+  system_prompt: string;
+  user_prompt: string;
+  created_at: string;
+}
+
+const templates = ref<TemplateItem[]>([]);
+const versions = ref<VersionItem[]>([]);
 const selectedTemplateId = ref('');
-const loaded = ref(false);
+const loading = ref(true);
 
 onMounted(async () => {
-  templates.value = listTemplates();
-  loaded.value = true;
+  try {
+    templates.value = await api.get<TemplateItem[]>('/api/prompt/templates');
+  } catch {
+    // 忽略，显示空状态
+  }
+  loading.value = false;
 });
 
 async function loadVersions(promptId: string): Promise<void> {
   selectedTemplateId.value = promptId;
-  versions.value = await listPromptVersions(promptId);
+  try {
+    versions.value = await api.get<VersionItem[]>(
+      `/api/prompt/versions/${promptId}`,
+    );
+  } catch {
+    versions.value = [];
+  }
 }
 </script>
 
@@ -30,48 +68,65 @@ async function loadVersions(promptId: string): Promise<void> {
     <div class="prompt-page">
       <h2>Prompt 管理</h2>
 
-      <div v-if="!loaded" class="state-box">加载中...</div>
+      <NSpin v-if="loading" class="state-box" />
 
       <template v-else>
-        <div class="template-grid">
-          <div
-            v-for="tpl in templates"
-            :key="tpl.id"
-            class="template-card"
-            :class="{ active: selectedTemplateId === tpl.id }"
-            @click="loadVersions(tpl.id)"
-          >
-            <h4>{{ tpl.name }}</h4>
-            <span class="platform-badge">{{ tpl.platform }}</span>
-          </div>
-        </div>
+        <!-- Empty -->
+        <NEmpty
+          v-if="templates.length === 0"
+          description="暂无 Prompt 模板"
+          class="state-box"
+        />
 
-        <div v-if="versions.length > 0" class="version-section">
-          <h3>版本历史</h3>
-          <div
-            v-for="ver in versions"
-            :key="ver.id"
-            class="version-item"
-          >
-            <div class="ver-header">
-              <strong>{{ ver.version }}</strong>
-              <time>{{ new Date(ver.createdAt).toLocaleString() }}</time>
-            </div>
-            <details class="ver-details">
-              <summary>查看 Prompt 详情</summary>
-              <div class="prompt-block">
-                <h5>System Prompt</h5>
-                <pre>{{ ver.content.systemPrompt }}</pre>
-                <h5>User Prompt</h5>
-                <pre>{{ ver.content.userPrompt }}</pre>
+        <template v-else>
+          <!-- Template Grid -->
+          <div class="template-grid">
+            <NCard
+              v-for="tpl in templates"
+              :key="tpl.id"
+              size="small"
+              :class="{ 'selected-card': selectedTemplateId === tpl.id }"
+              hoverable
+              @click="loadVersions(tpl.id)"
+            >
+              <div class="tpl-header">
+                <strong>{{ tpl.name }}</strong>
+                <NTag size="small">{{ tpl.platform }}</NTag>
               </div>
-            </details>
+            </NCard>
           </div>
-        </div>
 
-        <div v-else-if="selectedTemplateId" class="state-box">
-          该模板暂无版本记录
-        </div>
+          <!-- Version List -->
+          <div v-if="versions.length > 0" class="version-section">
+            <h3>版本历史</h3>
+            <NCollapse>
+              <NCollapseItem
+                v-for="ver in versions"
+                :key="ver.id"
+                :title="ver.version"
+                :name="ver.id"
+              >
+                <template #header-extra>
+                  <span class="ver-date">
+                    {{ new Date(ver.created_at).toLocaleString() }}
+                  </span>
+                </template>
+                <div class="prompt-block">
+                  <h5>System Prompt</h5>
+                  <pre>{{ ver.system_prompt }}</pre>
+                  <h5>User Prompt</h5>
+                  <pre>{{ ver.user_prompt }}</pre>
+                </div>
+              </NCollapseItem>
+            </NCollapse>
+          </div>
+
+          <NEmpty
+            v-else-if="selectedTemplateId"
+            description="该模板暂无版本记录"
+            class="state-box"
+          />
+        </template>
       </template>
     </div>
   </DefaultLayout>
@@ -98,9 +153,9 @@ h3 {
 }
 
 .state-box {
-  text-align: center;
-  padding: 40px 20px;
-  color: #9ca3af;
+  display: flex;
+  justify-content: center;
+  padding: 60px 20px;
 }
 
 .template-grid {
@@ -109,81 +164,33 @@ h3 {
   gap: 12px;
 }
 
-.template-card {
-  padding: 16px;
-  background: #ffffff;
-  border: 2px solid #e5e7eb;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-
-.template-card:hover {
-  border-color: #93c5fd;
-}
-
-.template-card.active {
-  border-color: #3b82f6;
+.selected-card {
+  border-color: #3b82f6 !important;
   background: #eff6ff;
 }
 
-.template-card h4 {
-  font-size: 14px;
-  font-weight: 600;
-  color: #111827;
-  margin: 0 0 6px;
+.tpl-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.platform-badge {
-  font-size: 12px;
-  color: #6b7280;
-  background: #f3f4f6;
-  padding: 2px 8px;
-  border-radius: 4px;
+.tpl-header strong {
+  font-size: 14px;
+  color: #111827;
 }
 
 .version-section {
   margin-top: 8px;
 }
 
-.version-item {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 14px 16px;
-  margin-bottom: 8px;
-}
-
-.ver-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.ver-header strong {
-  font-size: 15px;
-  color: #111827;
-}
-
-.ver-header time {
+.ver-date {
   font-size: 12px;
   color: #9ca3af;
 }
 
-.ver-details {
-  margin-top: 10px;
-}
-
-.ver-details summary {
-  cursor: pointer;
-  font-size: 13px;
-  color: #3b82f6;
-}
-
 .prompt-block {
-  margin-top: 8px;
   background: #f9fafb;
-  border: 1px solid #e5e7eb;
   border-radius: 6px;
   padding: 12px;
 }
