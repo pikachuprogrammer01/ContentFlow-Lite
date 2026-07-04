@@ -70,6 +70,11 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   if (auth.isAuthenticated) {
+    // 管理员页面：仅 admin 角色可访问，否则跳首页
+    if (to.meta.admin && auth.user?.role !== 'admin') {
+      next({ name: 'home' });
+      return;
+    }
     next();
   } else {
     next({ name: 'login', query: { redirect: to.fullPath } });

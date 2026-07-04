@@ -8,12 +8,14 @@
 import dotenv from 'dotenv';
 dotenv.config({ path: '../.env' });
 
-// 必须在 dotenv 之后动态 import，确保 config 读取到环境变量
 const { getPool } = await import('../db/client.js');
+const { createLogger } = await import('../utils/logger.js');
+
+const log = createLogger('scripts/promote-admin');
 
 const username = process.argv[2];
 if (!username) {
-  console.error('用法: npx tsx scripts/promote-admin.ts <username>');
+  log.error('用法: npx tsx scripts/promote-admin.ts <username>');
   process.exit(1);
 }
 
@@ -25,13 +27,13 @@ try {
   );
 
   if (result.affectedRows === 0) {
-    console.error(`❌ 未找到用户: ${username}`);
+    log.error(`未找到用户: ${username}`);
   } else {
-    console.log(`✅ 用户 ${username} 已提升为管理员`);
+    log.info(`用户 ${username} 已提升为管理员`);
   }
   await pool.end();
 } catch (err) {
-  console.error('数据库连接失败:', err);
+  log.error('数据库连接失败', { error: String(err) });
   process.exit(1);
 }
 
