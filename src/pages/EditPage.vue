@@ -19,7 +19,8 @@ import {
 } from 'naive-ui';
 import { useContentStore } from '@/stores/content';
 import { exportContent } from '@/exporter';
-import type { ExportFormat } from '@/types';
+import { PLATFORM_LABEL, PROVIDER_LABEL } from '@/constants';
+import type { ExportFormat, Platform } from '@/types';
 import DefaultLayout from '@/layouts/DefaultLayout.vue';
 
 const route = useRoute();
@@ -224,9 +225,9 @@ async function handleRegenerate(): Promise<void> {
             <dt>Prompt</dt>
             <dd>{{ store.currentContent.metadata.promptId }}@{{ store.currentContent.metadata.promptVersion }}</dd>
             <dt>平台</dt>
-            <dd>{{ store.currentContent.platform }}</dd>
+            <dd>{{ PLATFORM_LABEL[store.currentContent.platform as Platform] || store.currentContent.platform }}</dd>
             <dt>模型</dt>
-            <dd>{{ store.currentContent.metadata.model }}</dd>
+            <dd>{{ PROVIDER_LABEL[store.currentContent.metadata.model] || store.currentContent.metadata.model }}</dd>
             <dt>生成时间</dt>
             <dd>{{ new Date(store.currentContent.metadata.createdAt).toLocaleString() }}</dd>
           </dl>

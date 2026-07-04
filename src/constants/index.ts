@@ -1,29 +1,31 @@
 /**
- * ContentFlow Lite - 常量定义
+ * src/constants/index.ts — 平台 & Provider 常量
+ *
+ * 全局统一使用，避免各处硬编码中文标签。
  */
 
-export const APP_NAME = 'ContentFlow Lite';
+import type { Platform } from '@/types';
 
-export const PLATFORMS = ['xiaohongshu', 'douyin', 'gongzhonghao', 'zhihu'] as const;
-export type Platform = (typeof PLATFORMS)[number];
-
-export const PLATFORM_LABELS: Record<Platform, string> = {
+export const PLATFORM_LABEL: Record<Platform, string> = {
   xiaohongshu: '小红书',
-  douyin: '抖音',
-  gongzhonghao: '公众号',
+  wechat: '公众号',
   zhihu: '知乎',
+  douyin: '抖音',
+  bilibili: 'B站',
+  toutiao: '头条',
 };
 
-export const DEFAULT_PLATFORM: Platform = 'xiaohongshu';
+export const PLATFORMS: Platform[] = [
+  'xiaohongshu',
+  'wechat',
+  'zhihu',
+  'douyin',
+  'bilibili',
+  'toutiao',
+];
 
-export const DEFAULT_MODEL = 'GPT-5.5';
-
-export const MAX_RETRY_COUNT = 3;
-
-export const STORAGE_KEYS = {
-  PROMPT_LIST: 'cfl_prompt_list',
-  PROMPT_VERSION: 'cfl_prompt_version',
-  CONTENT_LIST: 'cfl_content_list',
-  GENERATION_HISTORY: 'cfl_generation_history',
-  SETTINGS: 'cfl_settings',
-} as const;
+export const PROVIDER_LABEL: Record<string, string> = {
+  mock: 'Mock 测试',
+  gemini: 'Gemini 2.0 Flash',
+  deepseek: 'DeepSeek V4 Flash',
+};

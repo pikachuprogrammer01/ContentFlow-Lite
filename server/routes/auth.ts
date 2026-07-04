@@ -78,6 +78,10 @@ export function createAuthRouter(): Router {
       // 哈希密码
       const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
 
+      // 第一个注册的用户自动成为管理员
+      const userCount = await userRepo.countAll();
+      const role = userCount === 0 ? 'admin' : 'user';
+
       // 创建用户
       const userId = randomUUID();
       await userRepo.create({
@@ -85,6 +89,7 @@ export function createAuthRouter(): Router {
         username: username.trim(),
         email: email.trim().toLowerCase(),
         passwordHash,
+        role,
       });
 
       // 生成 Token
@@ -93,7 +98,7 @@ export function createAuthRouter(): Router {
       log.info('用户注册成功', { username: username.trim() });
 
       res.status(201).json({
-        user: { id: userId, username: username.trim(), email: email.trim().toLowerCase(), role: 'user' },
+        user: { id: userId, username: username.trim(), email: email.trim().toLowerCase(), role },
         accessToken,
       });
     } catch (err) {
@@ -182,6 +187,44 @@ export function createAuthRouter(): Router {
       log.error('获取用户信息失败', { error: String(err) });
       res.status(500).json({
         error: { code: 'UNKNOWN_ERROR', message: '服务器内部错误' },
+      });
+    }
+  });
+
+  // ── PUT /api/auth/me ───────────────────────────────────
+  router.put('/me', authMiddleware, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.userId;
+      const { username, email } = req.body;
+
+      const fields: { username?: string; email?: string } = {};
+      if (username !== undefined) fields.username = username;
+      if (email !== undefined) fields.email = email;
+
+      if (Object.keys(fields).length === 0) {
+        res.status(400).json({
+          error: { code: 'INPUT_ERROR', message: '至少需要提供 username 或 email' },
+        });
+        return;
+      }
+
+      await userRepo.updateProfile(userId, fields);
+
+      // 返回更新后的用户信息
+      const user = await userRepo.findById(userId);
+      res.json({
+        user: {
+          id: user!.id,
+          username: user!.username,
+          email: user!.email,
+          role: user!.role,
+          createdAt: user!.created_at,
+        },
+      });
+    } catch (err) {
+      log.error('更新用户信息失败', { error: String(err) });
+      res.status(500).json({
+        error: { code: 'UNKNOWN_ERROR', message: '更新用户信息失败' },
       });
     }
   });

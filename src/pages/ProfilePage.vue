@@ -1,17 +1,78 @@
 <script setup lang="ts">
 /**
- * ProfilePage — 用户个人信息页
+ * ProfilePage — 用户个人信息页（可编辑）
  *
- * 展示从 GET /api/auth/me 获取的用户基本信息。
+ * 支持修改用户名和邮箱，通过 PUT /api/auth/me 提交。
  */
 
-import { NCard, NAvatar, NDescriptions, NDescriptionsItem, NButton, NSpace, NDivider } from 'naive-ui';
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import {
+  NCard,
+  NAvatar,
+  NDescriptions,
+  NDescriptionsItem,
+  NButton,
+  NSpace,
+  NDivider,
+  NInput,
+  useMessage,
+} from 'naive-ui';
 import { useAuthStore } from '@/stores/auth';
+import { api } from '@/utils/api-client';
+import type { UserInfo } from '@/types';
 import DefaultLayout from '@/layouts/DefaultLayout.vue';
 
 const router = useRouter();
 const auth = useAuthStore();
+const message = useMessage();
+
+// ── 编辑状态 ──────────────────────────────────────────
+
+const editing = ref(false);
+const saving = ref(false);
+const editUsername = ref('');
+const editEmail = ref('');
+
+function startEdit(): void {
+  editUsername.value = auth.user?.username || '';
+  editEmail.value = auth.user?.email || '';
+  editing.value = true;
+}
+
+function cancelEdit(): void {
+  editing.value = false;
+}
+
+async function saveProfile(): Promise<void> {
+  if (!editUsername.value.trim() || !editEmail.value.trim()) {
+    message.warning('用户名和邮箱不能为空');
+    return;
+  }
+  saving.value = true;
+  try {
+    const res = await api.put<{ user: UserInfo }>('/api/auth/me', {
+      username: editUsername.value.trim(),
+      email: editEmail.value.trim(),
+    });
+    auth.user = res.user;
+    editing.value = false;
+    message.success('个人信息已更新');
+  } catch (e: unknown) {
+    const err = e as { message?: string };
+    message.error(err?.message || '更新失败');
+  } finally {
+    saving.value = false;
+  }
+}
+
+function goBack(): void {
+  if (window.history.length > 1) {
+    router.back();
+  } else {
+    router.push('/');
+  }
+}
 
 function handleLogout(): void {
   auth.logout();
@@ -22,7 +83,10 @@ function handleLogout(): void {
 <template>
   <DefaultLayout>
     <div class="profile-page">
-      <h2>个人信息</h2>
+      <div class="page-header">
+        <NButton text @click="goBack">← 返回</NButton>
+        <h2>个人信息</h2>
+      </div>
 
       <NCard class="profile-card">
         <!-- 头像区 -->
@@ -35,38 +99,52 @@ function handleLogout(): void {
             {{ auth.user?.username?.charAt(0).toUpperCase() }}
           </NAvatar>
           <div class="avatar-info">
-            <h3>{{ auth.user?.username }}</h3>
+            <h3 v-if="!editing">{{ auth.user?.username }}</h3>
             <span class="role-badge">{{ auth.user?.role === 'admin' ? '管理员' : '普通用户' }}</span>
           </div>
         </div>
 
         <NDivider />
 
-        <!-- 详细信息 -->
-        <NDescriptions label-placement="left" :column="1">
-          <NDescriptionsItem label="用户名">
-            {{ auth.user?.username }}
-          </NDescriptionsItem>
-          <NDescriptionsItem label="邮箱">
-            {{ auth.user?.email }}
-          </NDescriptionsItem>
-          <NDescriptionsItem label="角色">
-            {{ auth.user?.role === 'admin' ? '管理员' : '普通用户' }}
-          </NDescriptionsItem>
-          <NDescriptionsItem label="注册时间">
-            {{ auth.user?.createdAt ? new Date(auth.user.createdAt).toLocaleString() : '—' }}
-          </NDescriptionsItem>
-          <NDescriptionsItem label="用户 ID">
-            <code>{{ auth.user?.id }}</code>
-          </NDescriptionsItem>
-        </NDescriptions>
+        <!-- 编辑模式 -->
+        <template v-if="editing">
+          <NSpace vertical>
+            <NInput v-model:value="editUsername" placeholder="用户名" />
+            <NInput v-model:value="editEmail" placeholder="邮箱" />
+          </NSpace>
+          <NSpace justify="end" style="margin-top: 16px">
+            <NButton @click="cancelEdit">取消</NButton>
+            <NButton type="primary" :loading="saving" @click="saveProfile">保存</NButton>
+          </NSpace>
+        </template>
 
-        <NDivider />
+        <!-- 展示模式 -->
+        <template v-else>
+          <NDescriptions label-placement="left" :column="1">
+            <NDescriptionsItem label="用户名">
+              {{ auth.user?.username }}
+            </NDescriptionsItem>
+            <NDescriptionsItem label="邮箱">
+              {{ auth.user?.email }}
+            </NDescriptionsItem>
+            <NDescriptionsItem label="角色">
+              {{ auth.user?.role === 'admin' ? '管理员' : '普通用户' }}
+            </NDescriptionsItem>
+            <NDescriptionsItem label="注册时间">
+              {{ auth.user?.createdAt ? new Date(auth.user.createdAt).toLocaleString() : '—' }}
+            </NDescriptionsItem>
+            <NDescriptionsItem label="用户 ID">
+              <code>{{ auth.user?.id }}</code>
+            </NDescriptionsItem>
+          </NDescriptions>
 
-        <!-- 操作区 -->
-        <NSpace justify="end">
-          <NButton type="error" @click="handleLogout">退出登录</NButton>
-        </NSpace>
+          <NDivider />
+
+          <NSpace justify="end">
+            <NButton @click="startEdit">编辑信息</NButton>
+            <NButton type="error" @click="handleLogout">退出登录</NButton>
+          </NSpace>
+        </template>
       </NCard>
     </div>
   </DefaultLayout>
@@ -78,11 +156,18 @@ function handleLogout(): void {
   margin: 0 auto;
 }
 
-h2 {
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.page-header h2 {
   font-size: 22px;
   font-weight: 700;
   color: #111827;
-  margin: 0 0 24px;
+  margin: 0;
 }
 
 .profile-card {

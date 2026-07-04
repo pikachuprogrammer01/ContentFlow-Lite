@@ -22,11 +22,17 @@ const route = useRoute();
 const auth = useAuthStore();
 const dialog = useDialog();
 
-const menuOptions: MenuOption[] = [
-  { label: '生成', key: 'home' },
-  { label: '历史', key: 'history' },
-  { label: 'Prompt', key: 'prompt' },
-];
+const menuOptions = computed<MenuOption[]>(() => {
+  const items: MenuOption[] = [
+    { label: '生成', key: 'home' },
+    { label: '历史', key: 'history' },
+    { label: 'Prompt', key: 'prompt' },
+  ];
+  if (auth.user?.role === 'admin') {
+    items.push({ label: '管理', key: 'admin' });
+  }
+  return items;
+});
 
 const activeKey = computed(() => {
   const name = String(route.name || 'home');

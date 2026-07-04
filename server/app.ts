@@ -13,6 +13,7 @@ import { createAuthRouter } from './routes/auth.js';
 import { createGenerateRouter } from './routes/generate.js';
 import { createContentRouter } from './routes/content.js';
 import { createPromptRouter } from './routes/prompt.js';
+import { createAdminRouter } from './routes/admin.js';
 
 // 自动注册所有 Provider（side-effect import）
 import './providers/mock-provider.js';
@@ -68,6 +69,7 @@ export function createApp(): Express {
   app.use('/api/generate', createGenerateRouter());
   app.use('/api/content', createContentRouter());
   app.use('/api/prompt', createPromptRouter());
+  app.use('/api/admin', createAdminRouter());
 
   return app;
 }

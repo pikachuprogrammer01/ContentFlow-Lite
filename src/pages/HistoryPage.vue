@@ -10,6 +10,8 @@ import { useRouter } from 'vue-router';
 import { NButton, NCard, NTag, NSpace, NSpin, NEmpty } from 'naive-ui';
 import { useContentStore } from '@/stores/content';
 import { exportContent } from '@/exporter';
+import { PLATFORM_LABEL } from '@/constants';
+import type { Platform } from '@/types';
 import DefaultLayout from '@/layouts/DefaultLayout.vue';
 
 const router = useRouter();
@@ -78,7 +80,7 @@ function handleExportJSON(id: string): void {
             <h4>{{ item.topic || '未命名' }}</h4>
             <p class="item-summary">{{ item.summary || '无摘要' }}</p>
             <NSpace :size="8" class="item-meta">
-              <NTag size="small">{{ item.platform }}</NTag>
+              <NTag size="small">{{ PLATFORM_LABEL[item.platform as Platform] || item.platform }}</NTag>
               <span>{{ item.pages.length }} 页</span>
               <span>{{ item.titles.length }} 个标题</span>
               <span>{{ new Date(item.metadata.createdAt).toLocaleDateString() }}</span>
