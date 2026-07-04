@@ -1,11 +1,20 @@
 <script setup lang="ts">
 /**
- * 默认布局 — Naive UI 顶部导航 + 内容区 + 用户信息
+ * 默认布局 — Naive UI 顶部导航 + 内容区 + 用户下拉菜单
  */
-import { NLayout, NLayoutHeader, NLayoutContent, NMenu, NSpace, NButton, NText, NTag, NAvatar, useDialog } from 'naive-ui';
+import {
+  NLayout,
+  NLayoutHeader,
+  NLayoutContent,
+  NMenu,
+  NText,
+  NAvatar,
+  NDropdown,
+  useDialog,
+} from 'naive-ui';
 import { useRouter, useRoute } from 'vue-router';
 import { computed } from 'vue';
-import type { MenuOption } from 'naive-ui';
+import type { MenuOption, DropdownOption } from 'naive-ui';
 import { useAuthStore } from '@/stores/auth';
 
 const router = useRouter();
@@ -40,6 +49,29 @@ function handleLogout(): void {
     },
   });
 }
+
+const userDropdownOptions: DropdownOption[] = [
+  {
+    label: '个人信息',
+    key: 'profile',
+  },
+  {
+    type: 'divider',
+    key: 'div',
+  },
+  {
+    label: '退出登录',
+    key: 'logout',
+  },
+];
+
+function handleUserDropdown(key: string): void {
+  if (key === 'profile') {
+    router.push('/profile');
+  } else if (key === 'logout') {
+    handleLogout();
+  }
+}
 </script>
 
 <template>
@@ -56,11 +88,17 @@ function handleLogout(): void {
           style="flex: 1"
           @update:value="handleMenuUpdate"
         />
-        <div v-if="auth.user" class="user-area">
-          <NAvatar size="small" round>{{ auth.user.username.charAt(0).toUpperCase() }}</NAvatar>
-          <NText class="user-name">{{ auth.user.username }}</NText>
-          <NButton size="tiny" quaternary type="error" @click="handleLogout">退出</NButton>
-        </div>
+        <NDropdown
+          v-if="auth.user"
+          trigger="click"
+          :options="userDropdownOptions"
+          @select="handleUserDropdown"
+        >
+          <div class="user-area">
+            <NAvatar size="small" round>{{ auth.user.username.charAt(0).toUpperCase() }}</NAvatar>
+            <NText class="user-name">{{ auth.user.username }}</NText>
+          </div>
+        </NDropdown>
       </div>
     </NLayoutHeader>
     <NLayoutContent>
@@ -97,6 +135,12 @@ function handleLogout(): void {
   padding: 4px 12px;
   border-radius: 8px;
   background: #f5f7fa;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.user-area:hover {
+  background: #e5e7eb;
 }
 
 .user-name {

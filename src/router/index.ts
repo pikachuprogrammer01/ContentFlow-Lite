@@ -36,6 +36,11 @@ const router = createRouter({
       name: 'prompt',
       component: () => import('@/pages/PromptPage.vue'),
     },
+    {
+      path: '/profile',
+      name: 'profile',
+      component: () => import('@/pages/ProfilePage.vue'),
+    },
   ],
 });
 
