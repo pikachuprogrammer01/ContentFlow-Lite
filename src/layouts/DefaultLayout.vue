@@ -94,9 +94,16 @@ function handleUserDropdown(key: string): void {
           :options="userDropdownOptions"
           @select="handleUserDropdown"
         >
-          <div class="user-area">
-            <NAvatar size="small" round>{{ auth.user.username.charAt(0).toUpperCase() }}</NAvatar>
-            <NText class="user-name">{{ auth.user.username }}</NText>
+          <div class="user-trigger">
+            <NAvatar
+              size="small"
+              round
+              :style="{ backgroundColor: '#3b82f6' }"
+            >
+              {{ auth.user.username.charAt(0).toUpperCase() }}
+            </NAvatar>
+            <span class="user-name">{{ auth.user.username }}</span>
+            <span class="arrow">▾</span>
           </div>
         </NDropdown>
       </div>
@@ -128,24 +135,34 @@ function handleUserDropdown(key: string): void {
   white-space: nowrap;
 }
 
-.user-area {
+.user-trigger {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 12px;
-  border-radius: 8px;
-  background: #f5f7fa;
+  padding: 4px 12px 4px 6px;
+  border-radius: 20px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.15s;
+  user-select: none;
 }
 
-.user-area:hover {
-  background: #e5e7eb;
+.user-trigger:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
 }
 
 .user-name {
   font-size: 13px;
   color: #374151;
+  font-weight: 500;
+}
+
+.arrow {
+  font-size: 10px;
+  color: #9ca3af;
+  margin-left: -2px;
 }
 
 .main-content {

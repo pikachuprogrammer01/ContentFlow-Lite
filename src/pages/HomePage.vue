@@ -22,6 +22,7 @@ import {
 } from 'naive-ui';
 import { useContentStore } from '@/stores/content';
 import { useAuthStore } from '@/stores/auth';
+import DefaultLayout from '@/layouts/DefaultLayout.vue';
 import type { Platform } from '@/types';
 
 const router = useRouter();
@@ -84,7 +85,8 @@ async function handleGenerate(): Promise<void> {
 </script>
 
 <template>
-  <div class="home-page">
+  <DefaultLayout>
+    <div class="home-page">
     <!-- 欢迎区 -->
     <div class="hero">
       <p class="greeting">
@@ -203,7 +205,8 @@ async function handleGenerate(): Promise<void> {
         </template>
       </NAlert>
     </NCard>
-  </div>
+    </div>
+  </DefaultLayout>
 </template>
 
 <style scoped>
