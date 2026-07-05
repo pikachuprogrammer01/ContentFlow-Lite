@@ -230,9 +230,9 @@ Phase 1: 后端核心（Auth + Workflow + Provider + API）
 Phase 2: 前端重构（Naive UI + 认证 + 生成 + 编辑）
     │
     ▼ 出口：浏览器输入主题 → 生成 → 编辑 → 导出，全流程可用
-Phase 3: 管理与增强（AdminJS + Settings + 图片 + 发布）
+Phase 3: AdminJS + TypeORM + 权限系统（SQL 注入消除 + RBAC + AdminJS 面板）
     │
-    ▼ 出口：完整 MVP，可部署到 Vercel + GitHub Pages
+    ▼ 出口：AdminJS /admin 可用 + permissionGuard 按角色限制 + 旧 mysql2 repo 移除
 Phase 4: 测试与发布（E2E + 部署 + 文档收尾）
     │
     ▼ 出口：所有测试通过 + 线上可访问
@@ -278,17 +278,192 @@ Phase 4: 测试与发布（E2E + 部署 + 文档收尾）
 
 **出口标准**：浏览器全流程走通（注册 → 登录 → 生成 → 编辑 → 导出）
 
-#### Phase 3 — 管理与增强
+#### Phase 3 — AdminJS + TypeORM + 权限系统（规划中，未实施）
 
-| 里程碑 | 任务 | 验证 |
-|---|---|---|
-| **M3.1 SettingsPage** | DB配置 / API Key / 平台账单链接 | 改DB配置 → 测试连接 |
-| **M3.2 AdminJS** | 数据库管理面板 /admin | 浏览器访问 /admin |
-| **M3.3 图片生成** | 通义万相接入 + 编辑页配图按钮 | 点击生成配图 → 图片URL展示 |
-| **M3.4 发布记录** | 编辑页标记已发布 + 历史记录 | 标记发布 → 记录显示 |
-| **M3.5 上下文溢出** | token估算 + 压缩 + 用户弹窗 | 超长对话 → 溢出提示弹窗 |
+> 以下为 Phase 3 完整设计方案，待 Phase 2 完成后执行。
 
-**出口标准**：前端 GitHub Pages + 后端 Vercel 均可访问，所有 MVP 功能可用
+##### 3.1 SQL 注入审计（Phase 2 现状 → Phase 3 通过 TypeORM 消除）
+
+| 文件 | 行号 | 代码模式 | 判定 |
+|------|------|---------|:--:|
+| `user-repo.ts` | 85, 113 | `SET ${sets.join(', ')}` — 列名硬编码在 if 块中 | 🟢 安全 |
+| `prompt-repo.ts` | 54-63 | `key` 来自 `Object.entries(fields)` 后拼入 `${key} = ?`，TS 类型约束 | 🟡 中 |
+| `prompt-repo.ts` | 217-218 | `WHERE id IN (${placeholders})` — ids 走参数数组 | 🟢 安全 |
+| `content-repo.ts` | 139 | 同上 | 🟢 安全 |
+| `generation-repo.ts` | 87 | 同上 | 🟢 安全 |
+| 其余 36 处 | — | 全部 `?` 占位符 + 参数数组 | 🟢 安全 |
+
+**结论**：4 个 repo 共 41 次 SQL 调用，1 处潜在风险。Phase 3 用 TypeORM 后 100% 消除。
+
+##### 3.2 权限系统数据库设计
+
+**问题**：当前 `role ENUM` 无法扩展，无数据范围层，角色规则硬编码。
+
+**核心设计**：角色实体化 + 数据范围 + 用户级覆盖。
+
+```sql
+-- 角色表（替代 ENUM，成为一等公民）
+CREATE TABLE roles (
+  id          VARCHAR(36)  PRIMARY KEY,
+  code        VARCHAR(64)  UNIQUE NOT NULL,  -- 'super_admin' | 'admin' | 'user' | 自定义
+  name        VARCHAR(64)  NOT NULL,
+  level       INT          DEFAULT 0,        -- super_admin=100, admin=50, user=10
+  is_system   TINYINT(1)   DEFAULT 0,        -- 系统内置角色，禁止删除/改 code
+  status      TINYINT(1)   DEFAULT 1,
+  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- 用户-角色 多对多
+CREATE TABLE user_roles (
+  user_id VARCHAR(36) NOT NULL,
+  role_id VARCHAR(36) NOT NULL,
+  PRIMARY KEY (user_id, role_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+);
+
+-- 权限定义表
+CREATE TABLE permissions (
+  id          VARCHAR(36)  PRIMARY KEY,
+  parent_id   VARCHAR(36)  DEFAULT NULL,
+  name        VARCHAR(64)  NOT NULL COMMENT '权限名称（中文）',
+  code        VARCHAR(128) NOT NULL UNIQUE COMMENT '权限标识（如 user:delete）',
+  type        ENUM('menu','button','api') NOT NULL DEFAULT 'api',
+  path        VARCHAR(255) DEFAULT NULL,
+  method      VARCHAR(10)  DEFAULT NULL COMMENT 'GET/POST/PUT/DELETE',
+  sort        INT          NOT NULL DEFAULT 0,
+  status      TINYINT(1)   NOT NULL DEFAULT 1,
+  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- 角色-权限 + 数据范围
+CREATE TABLE role_permissions (
+  role_id       VARCHAR(36) NOT NULL,
+  permission_id VARCHAR(36) NOT NULL,
+  data_scope    ENUM('ALL','SELF') DEFAULT 'SELF',  -- 全部数据 / 仅自己创建
+  PRIMARY KEY (role_id, permission_id),
+  FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+  FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
+);
+
+-- 用户级权限覆盖（补丁层）
+CREATE TABLE user_permissions (
+  user_id       VARCHAR(36) NOT NULL,
+  permission_id VARCHAR(36) NOT NULL,
+  effect        ENUM('GRANT','DENY') NOT NULL,
+  expires_at    DATETIME NULL,               -- 支持临时授权
+  created_by    VARCHAR(36),
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (user_id, permission_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
+);
+```
+
+**`roles.level` 用途**：替代 README 中"admin 不可删除 admin"这类硬编码规则，改为通用判断 — "A 能操作 B 当且仅当 A 最高角色 level > B 最高角色 level"。新增自定义角色时自动适用。
+
+**`data_scope` 设计选择**：挂在 `role_permissions` 上（而非若依原版的角色级），做到比若依更细：同一 admin 对 `content:list` 可以是 ALL，对 `apikey:list` 可单独设为 SELF。后续扩展 TEAM 值时只需加枚举值 + `role_permissions` 挂 `team_id`。
+
+##### 3.3 权限中间件 + 数据范围
+
+**JWT 简化**：Token 只放 `userId`，不存角色。权限变更走缓存生效（120s 内刷新），无需重新登录。
+
+```ts
+// server/services/permission-service.ts
+type DataScope = 'ALL' | 'SELF';
+type EffectivePermissions = Map<string, DataScope>;
+
+async function getEffectivePermissions(userId: string): Promise<EffectivePermissions> {
+  const cached = await permissionCache.get(`perm:${userId}`);
+  if (cached) return cached;
+
+  const roleIds   = await userRoleRepo.getRoleIds(userId);
+  const rolePerms = await rolePermissionRepo.getByRoleIds(roleIds);
+  const overrides = await userPermissionRepo.getByUserId(userId);
+
+  const effective: EffectivePermissions = new Map();
+  // 多角色取并集，同一 code 取更宽的 scope
+  for (const p of rolePerms) {
+    const cur = effective.get(p.code);
+    if (!cur || (cur === 'SELF' && p.dataScope === 'ALL'))
+      effective.set(p.code, p.dataScope);
+  }
+  // 用户覆盖：DENY 摘除，GRANT 补上
+  for (const o of overrides) {
+    if (o.expiresAt && o.expiresAt < new Date()) continue;
+    if (o.effect === 'DENY')  effective.delete(o.code);
+    if (o.effect === 'GRANT') effective.set(o.code, effective.get(o.code) ?? 'ALL');
+  }
+
+  await permissionCache.set(`perm:${userId}`, effective, { ttlSeconds: 120 });
+  return effective;
+}
+```
+
+```ts
+// permissionGuard — 替代 adminGuard / superAdminGuard
+export function permissionGuard(code: string) {
+  return async (req, res, next) => {
+    const scope = (await getEffectivePermissions(req.user.id)).get(code);
+    if (!scope) return res.status(403).json({ error: 'FORBIDDEN', code });
+    req.dataScope = scope;  // 下发给 repository 层
+    next();
+  };
+}
+```
+
+```ts
+// 路由层：只声明权限码
+router.get('/api/content', authMiddleware, permissionGuard('content:list'), handler);
+
+// Repository 层：根据 data_scope 过滤数据（关键！很多系统漏掉这层）
+async function listContents(userId: string, scope: 'ALL' | 'SELF') {
+  return scope === 'SELF'
+    ? db.query('SELECT * FROM contents WHERE owner_id = ? ORDER BY created_at DESC', [userId])
+    : db.query('SELECT * FROM contents ORDER BY created_at DESC');
+}
+```
+
+**缓存策略**：Redis 已配置 → 连接成功用 Redis → 失败静默降级内存。无 Redis 配置 → 静默走内存。**无控制台交互**。
+
+##### 3.4 TypeORM 替换 mysql2
+
+12 个 Entity（User/Content/PromptTemplate/PromptVersion/GenerationRecord/UserSetting/PublishRecord/AppLog/Role/Permission/RolePermission/UserPermission）。DataSource `synchronize: true`，保留 `schema.ts` 为手动建表参考。改造 `auth/content/generate/prompt` 四个路由 + `middleware/auth.ts`。**删除 `db/repositories/` 全部旧文件 + `routes/admin/` 全部手写子路由**。
+
+##### 3.5 AdminJS 面板
+
+`/admin` 替代自定义面板。复用 JWT authenticate。每个 Resource action 通过 `before` hook 对接 `permissionGuard`。Dashboard 统计卡片 + 趋势图。自定义 Action：重置密码/批量删除/清空生成记录。
+
+##### 3.6 前端
+
+侧边栏导航替代顶部导航。`/admin` 由 AdminJS 服务端接管，移除 `AdminPage.vue` + 5 个 Tab 组件。
+
+##### 3.7 分步执行
+
+| # | 步 | 内容 |
+|---|-----|------|
+| 1 | TypeORM + 新表 | 依赖 + DataSource + 12 Entity + roles/permissions 初始化 Seeder |
+| 2 | 权限服务 + 中间件 | getEffectivePermissions + permissionGuard + 缓存降级 |
+| 3 | 用户迁移 | users.role ENUM → user_roles 多对多映射，JWT 去 role |
+| 4 | 路由改造 | auth/content/generate/prompt → TypeORM + dataScope 过滤 |
+| 5 | AdminJS 面板 | authenticate + Resource 按角色 + Action 按权限 + Dashboard |
+| 6 | 前端适配 | 侧边栏 + /admin 接管 + 删旧组件 |
+| 7 | 文档 + Phase Gate | README/SPEC/PRD/CLAUDE 同步 + phase-3-done tag |
+
+##### 3.8 出口标准
+
+- ✅ 3 个系统角色 + 可扩展自定义角色，`level` 层级规则生效
+- ✅ `permissionGuard` 按权限码 + `data_scope` 双重管控
+- ✅ Repository 层通过 `scope` 参数过滤数据行（不漏数据）
+- ✅ JWT 仅含 `userId`，权限变更 120s 内生效
+- ✅ 用户级 `user_permissions` 覆盖（GRANT/DENY + 过期）可用
+- ✅ AdminJS `/admin` 可用，侧边栏按角色渲染
+- ✅ Redis 未配置时静默内存缓存
+- ✅ 旧 mysql2 repo + admin 子路由全部移除
+- ✅ `POST /api/generate` 端到端仍然可用
+- ✅ 前端 `pnpm build` 成功
 
 #### Phase 4 — 测试与发布
 
@@ -330,7 +505,7 @@ Phase 4: 测试与发布（E2E + 部署 + 文档收尾）
 | # | 日期 | 描述 | 优先级 | 状态 |
 |---|---|---|---|---|
 | — | — | 暂无 | — | — |
-| 1 | 2026-07-04 | 认证从双 Token 简化为单 Token。accessToken 有效期从 15min 改为 24h，去掉 /api/auth/refresh 端点和 refreshToken。更新 config.ts / auth.ts / .env.example / .env / backend.mdc | 中 | ✅ |
+| 4 | 2026-07-05 | SQL 注入审计 — 4 个 repo 共 41 处 SQL 调用，仅 1 处潜在风险（prompt-repo.ts:54-63 Object.entries 拼接列名，TS 类型约束防止利用）。Phase 3 用 TypeORM 彻底消除 | 中 | ⚠️ Phase 3 处理 |
 
 ---
 
