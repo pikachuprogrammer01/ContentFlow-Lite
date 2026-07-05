@@ -13,7 +13,11 @@ import { api } from '@/utils/api-client';
 import type { Repository } from '@/types';
 
 export class HttpRepository<T extends { id: string }> implements Repository<T> {
-  constructor(private readonly basePath: string) {}
+  private readonly basePath: string;
+
+  constructor(basePath: string) {
+    this.basePath = basePath;
+  }
 
   async getById(id: string): Promise<T | null> {
     return api.get<T>(`${this.basePath}/${id}`);

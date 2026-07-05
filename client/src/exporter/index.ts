@@ -44,12 +44,12 @@ class MarkdownExporter implements Exporter {
     lines.push('');
 
     content.pages.forEach((page, index) => {
-      if (page.title) {
-        lines.push(`### ${page.title}`);
+      if (index === 0) {
+        lines.push(`### ${page.text.slice(0, 50)}...`);
+      } else {
+        lines.push(`### 第 ${index + 1} 页`);
       }
-      if (page.content) {
-        lines.push(page.content);
-      }
+      lines.push(page.text);
       if (page.imagePrompt) {
         lines.push(`> 图片 Prompt: ${page.imagePrompt}`);
       }

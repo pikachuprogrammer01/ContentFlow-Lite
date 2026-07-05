@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { authMiddleware } from '../middleware/auth.js';
 import * as promptRepo from '../db/repositories/prompt-repo.js';
 import { createLogger } from '../utils/logger.js';
+import type { PromptTemplateRow } from '../types.js';
 
 const log = createLogger('routes/prompt');
 
@@ -184,7 +185,7 @@ export function createPromptRouter(): Router {
       const { name, platform, systemPrompt, userPrompt, isDefault } = req.body;
 
       // 更新模板字段
-      const fields: Record<string, unknown> = {};
+      const fields: Partial<Pick<PromptTemplateRow, 'name' | 'system_prompt' | 'user_prompt' | 'is_default' | 'platform'>> = {};
       if (name !== undefined) fields.name = name;
       if (platform !== undefined) fields.platform = platform;
       if (systemPrompt !== undefined) fields.system_prompt = systemPrompt;
@@ -192,7 +193,7 @@ export function createPromptRouter(): Router {
       if (isDefault !== undefined) fields.is_default = isDefault ? 1 : 0;
 
       if (Object.keys(fields).length > 0) {
-        await promptRepo.updateTemplate(id, fields as any);
+        await promptRepo.updateTemplate(id, fields);
       }
 
       // 生成新版本快照

@@ -15,7 +15,6 @@ import {
   NSelect,
   NSpace,
   NCard,
-  NDivider,
 } from 'naive-ui';
 import { useContentStore } from '@/stores/content';
 import { exportContent } from '@/exporter';
@@ -34,7 +33,7 @@ const saving = ref(false);
 const exportFormatOptions = [
   { label: 'Markdown', value: 'markdown' },
   { label: 'JSON', value: 'json' },
-] as const;
+];
 
 function addTag(): void {
   const tag = newTag.value.trim();
@@ -146,16 +145,16 @@ async function handleRegenerate(): Promise<void> {
           >
             <NSpace vertical>
               <NInput
-                :value="page.title"
+                :value="page.text"
                 placeholder="页面标题"
-                @update:value="(v: string) => (page.title = v)"
+                @update:value="(v: string) => (page.text = v)"
               />
               <NInput
-                :value="page.content"
+                :value="page.text"
                 type="textarea"
                 placeholder="页面正文"
                 :autosize="{ minRows: 4, maxRows: 10 }"
-                @update:value="(v: string) => (page.content = v)"
+                @update:value="(v: string) => (page.text = v)"
               />
             </NSpace>
           </NCard>

@@ -66,12 +66,11 @@ const displayColumns = computed(() => isSuperAdmin.value ? [typeCol, ...columns]
 async function load(): Promise<void> {
   loading.value = true;
   try {
-    const res = await api.get<{ data: { items: PromptTemplate[]; pagination: { total: number } } }>(
+    const res = await api.get<{ items: PromptTemplate[]; pagination: { total: number } }>(
       `/api/admin/prompt-templates?page=${page.value}&limit=${limit.value}`,
     );
-    const d = (res as any).data || res;
-    items.value = d.items || [];
-    total.value = d.pagination?.total || 0;
+    items.value = res.items || [];
+    total.value = res.pagination?.total || 0;
   } catch (e: unknown) {
     const err = e as { message?: string };
     message.error(err?.message || '加载失败');

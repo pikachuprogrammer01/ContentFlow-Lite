@@ -6,7 +6,7 @@
  */
 
 import { ref, onMounted, h, computed } from 'vue';
-import { NDataTable, NButton, NPopconfirm, NSpace, NPopselect, useMessage } from 'naive-ui';
+import { NDataTable, NButton, NPopconfirm, NSpace, useMessage } from 'naive-ui';
 import type { DataTableColumn, DataTableRowKey } from 'naive-ui';
 import { api } from '@/utils/api-client';
 import { platformLabel } from '@/utils/platform';
@@ -67,12 +67,11 @@ const displayColumns = computed(() => isSuperAdmin.value ? [typeCol, ...columns]
 async function load(): Promise<void> {
   loading.value = true;
   try {
-    const res = await api.get<{ data: { items: ContentItem[]; pagination: { total: number } } }>(
+    const res = await api.get<{ items: ContentItem[]; pagination: { total: number } }>(
       `/api/admin/contents?page=${page.value}&limit=${limit.value}`,
     );
-    const d = (res as any).data || res;
-    items.value = d.items || [];
-    total.value = d.pagination?.total || 0;
+    items.value = res.items || [];
+    total.value = res.pagination?.total || 0;
   } catch (e: unknown) {
     const err = e as { message?: string };
     message.error(err?.message || '加载失败');

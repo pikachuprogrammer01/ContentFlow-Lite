@@ -25,6 +25,7 @@ import {
 } from 'naive-ui';
 import { api } from '@/utils/api-client';
 import { PLATFORM_LABEL, PLATFORMS } from '@/constants';
+import type { Platform } from '@/types';
 import DefaultLayout from '@/layouts/DefaultLayout.vue';
 
 const message = useMessage();
@@ -59,8 +60,8 @@ const loading = ref(true);
 async function loadTemplates(): Promise<void> {
   loading.value = true;
   try {
-    const res = await api.get<{ data: TemplateItem[] }>('/api/prompt/templates');
-    templates.value = Array.isArray(res) ? res : (res as any)?.data || [];
+    const res = await api.get<TemplateItem[]>('/api/prompt/templates');
+    templates.value = res;
   } catch {
     // ignore
   }
@@ -70,8 +71,8 @@ async function loadTemplates(): Promise<void> {
 async function loadVersions(promptId: string): Promise<void> {
   selectedTemplateId.value = promptId;
   try {
-    const res = await api.get<{ data: VersionItem[] }>(`/api/prompt/versions/${promptId}`);
-    versions.value = Array.isArray(res) ? res : (res as any)?.data || [];
+    const res = await api.get<VersionItem[]>(`/api/prompt/versions/${promptId}`);
+    versions.value = res;
   } catch {
     versions.value = [];
   }
@@ -194,7 +195,7 @@ onMounted(loadTemplates);
                 <div class="tpl-header">
                   <strong>{{ tpl.name }}</strong>
                   <NSpace :size="4">
-                    <NTag size="tiny">{{ PLATFORM_LABEL[tpl.platform] || tpl.platform }}</NTag>
+                    <NTag size="tiny">{{ PLATFORM_LABEL[tpl.platform as Platform] || tpl.platform }}</NTag>
                     <NTag size="tiny" :type="tpl.type === 'image' ? 'warning' : 'info'">{{ tpl.type }}</NTag>
                   </NSpace>
                 </div>

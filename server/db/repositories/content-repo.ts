@@ -112,8 +112,9 @@ export async function listAll(limit = 20, offset = 0): Promise<(Content & { user
     [limit, offset],
   );
   return rows.map((r) => {
-    const c = rowToContent(r as unknown as ContentRow);
-    return { ...c, userId: (r as any).user_id as string };
+    const row = r as unknown as ContentRow;
+    const c = rowToContent(row);
+    return { ...c, userId: row.user_id };
   });
 }
 

@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@contentflow/shared": "workspace:*",
     "axios": "^1.18.1",
     "naive-ui": "^2.44.1",
     "pinia": "^3.0.4",

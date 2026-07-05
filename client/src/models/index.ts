@@ -22,25 +22,29 @@ function generateId(prefix: string): string {
   return `${prefix}_${Date.now()}_${_idCounter}`;
 }
 
-export function createTitle(text: string): Title {
+export function createTitle(text: string, type: Title['type'] = 'main'): Title {
   return {
     id: generateId('title'),
     text,
+    type,
   };
 }
 
-export function createCover(title: string, subtitle: string): Cover {
+export function createCover(title: string, subtitle?: string): Cover {
   return {
     title,
     subtitle,
   };
 }
 
-export function createPage(title: string, content: string, imagePrompt?: string): Page {
+let _pageOrder = 0;
+
+export function createPage(text: string, imagePrompt?: string): Page {
+  _pageOrder += 1;
   return {
     id: generateId('page'),
-    title,
-    content,
+    order: _pageOrder,
+    text,
     ...(imagePrompt ? { imagePrompt } : {}),
   };
 }
@@ -57,7 +61,6 @@ export function createMetadata(
     model,
     platform,
     createdAt: new Date().toISOString(),
-    generator: 'ContentFlow Lite',
   };
 }
 
@@ -100,7 +103,6 @@ export function createEmptyContent(platform: string = ''): Content {
       model: '',
       platform,
       createdAt: new Date().toISOString(),
-      generator: 'ContentFlow Lite',
     },
   };
 }
@@ -127,21 +129,13 @@ export function createGenerationRecord(
 
 export function createWorkflowContext(workflowId: string): WorkflowContext {
   return {
-    workflowId,
+    traceId: workflowId,
     input: {
       topic: '',
       platform: '',
-      promptId: '',
-      promptVersion: '',
+      provider: '',
+      userId: '',
     },
-    startedAt: new Date().toISOString(),
-    nodeTimings: {
-      input: 0,
-      prompt: 0,
-      provider: 0,
-      parse: 0,
-      dto: 0,
-      output: 0,
-    },
+    currentNode: 'input' as const,
   };
 }

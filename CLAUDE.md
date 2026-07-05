@@ -7,6 +7,7 @@ ContentFlow Lite 是一个基于 Workflow 的结构化 AI 内容生成框架，�
 - **Workflow** — 7 节点 Pipeline 流程编排（Input → Prompt → Provider → Parse → Validate → DTO → Output）
 - **Prompt Version** — 提示词版本控制，每次修改生成新版本，不可覆盖
 - **Content DTO** — 统一数据结构，所有 AI 输出必须转换为此格式
+- **@contentflow/shared** — 共享类型包，客户端与服务端唯一类型源
 
 ---
 

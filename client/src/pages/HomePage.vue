@@ -43,13 +43,13 @@ const platformOptions = [
   { label: '🎵 抖音', value: 'douyin' },
   { label: '📺 B站', value: 'bilibili' },
   { label: '📰 头条', value: 'toutiao' },
-] as const;
+];
 
 const providerOptions = [
   { label: '🧪 Mock（开发测试）', value: 'mock' },
   { label: '🧠 Gemini 2.0 Flash', value: 'gemini' },
   { label: '🚀 DeepSeek V4 Flash', value: 'deepseek' },
-] as const;
+];
 
 const suggestionTopics = [
   { label: '春日穿搭', icon: '👗' },

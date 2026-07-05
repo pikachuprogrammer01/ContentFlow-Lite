@@ -105,6 +105,10 @@ graph TD
 
 ```
 ContentFlow-Lite/
+├── shared/                     # 🆕 共享类型包（@contentflow/shared）
+│   ├── src/types.ts            # 核心类型 — 客户端/服务端唯一类型源
+│   └── src/constants.ts        # 共享常量（平台、Provider、默认值）
+│
 ├── client/                     # 前端（Vue 3 + Naive UI + Vite）
 │   ├── package.json
 │   ├── vite.config.ts
@@ -119,12 +123,16 @@ ContentFlow-Lite/
 │   │   │   ├── LoginPage.vue   # 登录/注册
 │   │   │   ├── ProfilePage.vue # 个人设置
 │   │   │   └── AdminPage.vue   # 管理面板（5 Tab：用户/内容/生成记录/Prompt模板/版本）
-│   │   ├── components/         # 通用组件
+│   │   ├── components/         # 通用组件 + admin/ 子组件
 │   │   ├── stores/             # Pinia 状态管理
 │   │   ├── services/           # API 调用封装
 │   │   ├── router/             # Vue Router
-│   │   ├── types/              # 前端类型定义
-│   │   └── utils/              # 前端工具（api-client, storage 等）
+│   │   ├── types/              # 类型入口（重导出 @contentflow/shared）
+│   │   ├── constants/          # 常量入口（重导出 @contentflow/shared）
+│   │   ├── utils/              # 前端工具（api-client/axios, storage 等）
+│   │   ├── exporter/           # Markdown/JSON 导出
+│   │   ├── models/             # Content DTO 工厂函数
+│   │   └── repositories/       # HttpRepository（泛型 HTTP 仓库）
 │   └── public/                 # 静态资源
 │
 ├── server/                     # 后端（Express + TypeScript）
@@ -133,16 +141,23 @@ ContentFlow-Lite/
 │   ├── index.ts                # 入口：启动 + 超级管理员初始化
 │   ├── app.ts                  # Express 应用装配
 │   ├── config.ts               # 配置加载（.env + config.json）
-│   ├── types.ts                # 全局类型定义
+│   ├── types.ts                # 类型入口（重导出 @contentflow/shared）
 │   ├── env.ts                  # 环境变量加载（优先 server/.env）
 │   ├── routes/                 # API 路由
 │   │   ├── auth.ts             # /api/auth/* 认证
 │   │   ├── generate.ts         # POST /api/generate 生成
 │   │   ├── content.ts          # /api/content/* 内容 CRUD
 │   │   ├── prompt.ts           # /api/prompt/* 模板管理
-│   │   └── admin.ts            # /api/admin/* 用户管理
+│   │   ├── admin.ts            # 管理路由入口（聚合）
+│   │   └── admin/              # 管理子路由
+│   │       ├── index.ts        # 聚合入口
+│   │       ├── users.ts        # 用户管理
+│   │       ├── contents.ts     # 内容管理
+│   │       ├── generations.ts  # 生成记录管理
+│   │       └── prompts.ts      # Prompt 模板/版本管理
 │   ├── middleware/             # 中间件
 │   │   ├── auth.ts             # JWT 守卫 + adminGuard
+│   │   └── rate-limit.ts       # 限流（登录/生成/重置密码）
 │   │   └── rate-limit.ts       # 限流配置
 │   ├── workflow/               # 7 节点 Pipeline
 │   │   ├── index.ts            # 引擎入口 executeWorkflow()

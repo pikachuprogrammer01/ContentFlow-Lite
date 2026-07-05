@@ -19,8 +19,6 @@ import {
   NAlert,
   NSpace,
   type FormInst,
-  type FormRules,
-  type FormItemRule,
 } from 'naive-ui';
 import { useAuthStore } from '@/stores/auth';
 
@@ -28,15 +26,6 @@ const router = useRouter();
 const auth = useAuthStore();
 
 // ── 常量 ──────────────────────────────────────────────
-
-const USERNAME_RE = /^[a-zA-Z0-9_\u4e00-\u9fff]+$/;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const USERNAME_MIN = 2;
-const USERNAME_MAX = 30;
-const PASSWORD_MIN = 6;
-const PASSWORD_MAX = 128;
-
-// ── 状态 ──────────────────────────────────────────────
 
 const activeTab = ref<'login' | 'register'>('login');
 const loading = ref(false);
@@ -57,73 +46,9 @@ const showAdminKey = ref(false);
 
 // ── 校验规则 ──────────────────────────────────────────
 
-const usernameRule: FormItemRule = {
-  required: true,
-  message: '请输入用户名',
-  trigger: ['blur', 'input'],
-  validator(_rule, value: string) {
-    const v = (value || '').trim();
-    if (!v) return new Error('用户名不能为空');
-    if (v.length < USERNAME_MIN) return new Error(`用户名至少 ${USERNAME_MIN} 个字符`);
-    if (v.length > USERNAME_MAX) return new Error(`用户名不能超过 ${USERNAME_MAX} 个字符`);
-    if (!USERNAME_RE.test(v)) return new Error('用户名只能包含中文、英文、数字和下划线');
-    return true;
-  },
-};
 
-const loginPasswordRule: FormItemRule = {
-  required: true,
-  message: '请输入密码',
-  trigger: ['blur', 'input'],
-  validator(_rule, value: string) {
-    if (!value) return new Error('密码不能为空');
-    if (value.length < PASSWORD_MIN) return new Error(`密码至少 ${PASSWORD_MIN} 个字符`);
-    if (value.length > PASSWORD_MAX) return new Error(`密码不能超过 ${PASSWORD_MAX} 个字符`);
-    return true;
-  },
-};
 
-const loginRules: FormRules = {
-  username: usernameRule,
-  password: loginPasswordRule,
-};
 
-const registerRules: FormRules = {
-  username: usernameRule,
-  email: {
-    required: true,
-    message: '请输入邮箱',
-    trigger: ['blur', 'input'],
-    validator(_rule, value: string) {
-      const v = (value || '').trim();
-      if (!v) return new Error('邮箱不能为空');
-      if (v.length > 255) return new Error('邮箱地址过长');
-      if (!EMAIL_RE.test(v)) return new Error('邮箱格式不正确');
-      return true;
-    },
-  },
-  password: {
-    required: true,
-    message: '请输入密码',
-    trigger: ['blur', 'input'],
-    validator(_rule, value: string) {
-      if (!value) return new Error('密码不能为空');
-      if (value.length < PASSWORD_MIN) return new Error(`密码至少 ${PASSWORD_MIN} 个字符`);
-      if (value.length > PASSWORD_MAX) return new Error(`密码不能超过 ${PASSWORD_MAX} 个字符`);
-      return true;
-    },
-  },
-  confirmPassword: {
-    required: true,
-    message: '请再次输入密码',
-    trigger: ['blur', 'input'],
-    validator(_rule, value: string) {
-      if (!value) return new Error('请确认密码');
-      if (value !== registerForm.password) return new Error('两次输入的密码不一致');
-      return true;
-    },
-  },
-};
 
 // ── 方法 ──────────────────────────────────────────────
 
@@ -188,7 +113,6 @@ async function handleRegister(): Promise<void> {
 function onTabChange(tab: 'login' | 'register'): void {
   errorMsg.value = '';
   activeTab.value = tab;
-}
 </script>
 
 <template>
@@ -241,7 +165,7 @@ function onTabChange(tab: 'login' | 'register'): void {
             <NFormItem label="邮箱" required>
               <NInput
                 v-model:value="registerForm.email"
-                type="email"
+                type="text"
                 placeholder="your@email.com"
                 :disabled="loading"
                 clearable

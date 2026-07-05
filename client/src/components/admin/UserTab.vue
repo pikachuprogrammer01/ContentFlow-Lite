@@ -81,8 +81,8 @@ const columns: DataTableColumn<AdminUser>[] = [
 async function loadUsers(): Promise<void> {
   loading.value = true;
   try {
-    const res = await api.get<{ data: AdminUser[] }>('/api/admin/users');
-    users.value = Array.isArray(res) ? res : (res as any).data || [];
+    const res = await api.get<AdminUser[]>('/api/admin/users');
+    users.value = res;
   } catch (e: unknown) {
     const err = e as { message?: string };
     message.error(err?.message || '加载失败');

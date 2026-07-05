@@ -4,7 +4,7 @@
  * 超级管理员支持批量删除和清空全部记录。
  */
 
-import { ref, onMounted, h, computed } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { NDataTable, NButton, NPopconfirm, NSpace, useMessage } from 'naive-ui';
 import type { DataTableColumn, DataTableRowKey } from 'naive-ui';
 import { api } from '@/utils/api-client';
@@ -56,12 +56,11 @@ const displayColumns = computed(() => isSuperAdmin.value ? [typeCol, ...columns]
 async function load(): Promise<void> {
   loading.value = true;
   try {
-    const res = await api.get<{ data: { items: GenRecord[]; pagination: { total: number } } }>(
+    const res = await api.get<{ items: GenRecord[]; pagination: { total: number } }>(
       `/api/admin/generation-records?page=${page.value}&limit=${limit.value}`,
     );
-    const d = (res as any).data || res;
-    items.value = d.items || [];
-    total.value = d.pagination?.total || 0;
+    items.value = res.items || [];
+    total.value = res.pagination?.total || 0;
   } catch (e: unknown) {
     const err = e as { message?: string };
     message.error(err?.message || '加载失败');

@@ -48,7 +48,7 @@ export const useContentStore = defineStore('content', () => {
     } catch (e: unknown) {
       const err = e as { code?: string; message?: string; node?: string };
       error.value = {
-        code: err.code || 'UNKNOWN_ERROR',
+        code: (err.code as WorkflowError['code']) || 'UNKNOWN_ERROR',
         message: err.message || '生成失败',
         node: (err.node as WorkflowError['node']) || 'input',
         timestamp: new Date().toISOString(),
