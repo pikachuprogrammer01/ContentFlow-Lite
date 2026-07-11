@@ -113,6 +113,7 @@ async function handleRegister(): Promise<void> {
 function onTabChange(tab: 'login' | 'register'): void {
   errorMsg.value = '';
   activeTab.value = tab;
+}
 </script>
 
 <template>

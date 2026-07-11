@@ -33,18 +33,15 @@ class MockProvider implements AIProvider {
       pages: [
         {
           id: 'p1',
-          title: '介绍',
-          content: `${topic} 是一个引人关注的话题。本文将带你全面了解。`,
+          text: `## 介绍\n\n${topic} 是一个引人关注的话题。本文将带你全面了解。`,
         },
         {
           id: 'p2',
-          title: '核心要点',
-          content: `关于 ${topic}，有几个关键点需要了解。首先是背景和现状。`,
+          text: `## 核心要点\n\n关于 ${topic}，有几个关键点需要了解。首先是背景和现状。`,
         },
         {
           id: 'p3',
-          title: '深入分析',
-          content: `我们来更深入地看看 ${topic} 的细节和值得关注的地方。`,
+          text: `## 深入分析\n\n我们来更深入地看看 ${topic} 的细节和值得关注的地方。`,
         },
       ],
       tags: ['内容创作', '干货分享'],

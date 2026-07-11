@@ -143,20 +143,13 @@ async function handleRegenerate(): Promise<void> {
             :title="`第 ${index + 1} 页`"
             class="page-card"
           >
-            <NSpace vertical>
-              <NInput
-                :value="page.text"
-                placeholder="页面标题"
-                @update:value="(v: string) => (page.text = v)"
-              />
-              <NInput
-                :value="page.text"
-                type="textarea"
-                placeholder="页面正文"
-                :autosize="{ minRows: 4, maxRows: 10 }"
-                @update:value="(v: string) => (page.text = v)"
-              />
-            </NSpace>
+            <NInput
+              :value="page.text"
+              type="textarea"
+              placeholder="页面正文"
+              :autosize="{ minRows: 4, maxRows: 10 }"
+              @update:value="(v: string) => (page.text = v)"
+            />
           </NCard>
         </section>
 
