@@ -7,7 +7,7 @@
 
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { NButton, NCard, NTag, NSpace, NSpin, NEmpty } from 'naive-ui';
+import { NButton, NCard, NTag, NSpace, NSpin, NEmpty, NPopconfirm } from 'naive-ui';
 import { useContentStore } from '@/stores/content';
 import { exportContent } from '@/exporter';
 import { PLATFORM_LABEL } from '@/constants';
@@ -90,9 +90,14 @@ function handleExportJSON(id: string): void {
             <NButton size="small" @click="handleExportJSON(item.id)">
               导出
             </NButton>
-            <NButton size="small" type="error" @click="handleDelete(item.id)">
-              删除
-            </NButton>
+            <NPopconfirm @positive-click="handleDelete(item.id)">
+              <template #trigger>
+                <NButton size="small" type="error">
+                  删除
+                </NButton>
+              </template>
+              确定删除该内容？
+            </NPopconfirm>
           </div>
         </NCard>
       </div>

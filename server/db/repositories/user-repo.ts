@@ -91,7 +91,7 @@ export async function updateProfile(
 export async function listAll(): Promise<UserRow[]> {
   const pool = getPool();
   const [rows] = await pool.query<import('mysql2/promise').RowDataPacket[]>(
-    'SELECT id, username, email, role, created_at FROM users ORDER BY created_at DESC',
+    'SELECT id, username, email, role, created_at, updated_at FROM users ORDER BY created_at DESC',
   );
   return rows as UserRow[];
 }

@@ -105,16 +105,20 @@ export async function remove(id: string): Promise<void> {
 /**
  * [ADMIN] 获取所有内容列表（跨用户，按创建时间倒序，分页）。
  */
-export async function listAll(limit = 20, offset = 0): Promise<(Content & { userId: string })[]> {
+export async function listAll(limit = 20, offset = 0): Promise<(Content & { userId: string; username: string })[]> {
   const pool = getPool();
   const [rows] = await pool.query<import('mysql2/promise').RowDataPacket[]>(
-    'SELECT * FROM contents ORDER BY created_at DESC LIMIT ? OFFSET ?',
+    `SELECT c.*, u.username
+     FROM contents c
+     LEFT JOIN users u ON c.user_id = u.id
+     ORDER BY c.created_at DESC
+     LIMIT ? OFFSET ?`,
     [limit, offset],
   );
   return rows.map((r) => {
-    const row = r as unknown as ContentRow;
+    const row = r as unknown as ContentRow & { username: string };
     const c = rowToContent(row);
-    return { ...c, userId: row.user_id };
+    return { ...c, userId: row.user_id, username: row.username };
   });
 }
 
