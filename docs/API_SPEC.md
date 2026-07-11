@@ -14,7 +14,333 @@
 
 ---
 
+## 通用响应规范
+
+> 以下规范适用于所有已实现接口。每个接口的反常场景不再单独列举，统一引用本节。
+
+### 响应信封（Envelope）
+
+所有响应使用统一的 JSON 信封结构：
+
+**成功响应：**
+
+```json
+{
+  "code": 200,
+  "data": "<具体数据，见各场景示例>",
+  "message": "可为空，如果有信息需要加入"
+}
+```
+
+> 例外：认证模块（登录/注册/个人信息）使用 `{ user: {...}, accessToken: "..." }` 格式；健康检查使用 `{ status, db, timestamp }` 格式。
+
+**错误响应：**
+
+```json
+{
+  "code": "INPUT_ERROR",
+  "error": {
+    "data": [
+      { "field": "username", "message": "用户名至少 3 个字符" },
+      { "field": "password", "message": "密码至少 6 个字符" }
+    ]
+  },
+  "message": "用户名至少 3 个字符"
+}
+```
+
+> `error.data` 数组仅在参数校验失败时存在，列出每个字段的校验错误。其他错误类型无此字段。
+
+---
+
+### 场景 1：列表成功 `200`
+
+**何时出现**：`GET /api/content`、`GET /api/prompt/templates`、`GET /api/admin/users` 等列表类接口查询成功且有数据。
+
+```json
+{
+  "code": 200,
+  "data": [
+    { "id": "a1b2c3d4-...", "topic": "武功山徒步喝什么", "platform": "xiaohongshu", "createdAt": "2026-07-05T10:00:00Z" },
+    { "id": "e5f6g7h8-...", "topic": "周末露营吃什么", "platform": "xiaohongshu", "createdAt": "2026-07-04T08:30:00Z" }
+  ],
+  "message": "查询成功"
+}
+```
+
+> 管理面板分页列表使用 `{ code: 200, data: { items: [...], pagination: { page, limit, total, totalPages } }, message: "查询成功" }` 格式，由 `server/utils/route-helpers.ts:46` 的 `wrapPagination()` 生成。
+
+| 处理机制 | 文件 |
+|---------|------|
+| 成功响应组装 | `server/routes/content.ts:54`、`server/routes/prompt.ts:45` 等路由文件 |
+| 分页封装 | `server/utils/route-helpers.ts:46` `wrapPagination()` |
+| 分页参数解析 | `server/utils/route-helpers.ts:29` `parsePagination()` |
+
+---
+
+### 场景 2：详情对象成功 `200`
+
+**何时出现**：`GET /api/content/:id`、`GET /api/prompt/templates/:id`、`GET /api/admin/prompt-versions` 等单资源查询成功。
+
+```json
+{
+  "code": 200,
+  "data": {
+    "id": "a1b2c3d4-...",
+    "topic": "武功山徒步喝什么",
+    "platform": "xiaohongshu",
+    "titles": [
+      { "text": "武功山徒步，这5种饮品绝了！", "score": 9.2 }
+    ],
+    "pages": [
+      { "index": 1, "text": "正文内容...", "imagePrompt": "...", "imageUrl": null, "imageStatus": "pending" }
+    ],
+    "metadata": {
+      "promptId": "tpl-001",
+      "promptVersion": "V2",
+      "model": "gemini-2.0-flash",
+      "generator": "contentflow-lite",
+      "createdAt": "2026-07-05T10:30:00Z"
+    }
+  },
+  "message": "查询成功"
+}
+```
+
+| 处理机制 | 文件 |
+|---------|------|
+| 单资源查询 | `server/routes/content.ts:93`、`server/routes/prompt.ts:84` |
+| 404 兜底 | 路由内 `if (!row) return res.status(404).json(...)` |
+
+---
+
+### 场景 3：创建成功 `201`
+
+**何时出现**：`POST /api/auth/register`、`POST /api/content`、`POST /api/prompt/templates` 等写入类接口成功。
+
+```json
+{
+  "code": 201,
+  "data": {
+    "id": "a1b2c3d4-..."
+  },
+  "message": "创建成功"
+}
+```
+
+> 注册接口使用特殊格式：`{ user: { id, username, email, role }, accessToken: "..." }`（无 `code`/`message` 顶层字段）；Prompt 模板创建返回 `{ data: { id, version: 1 } }`。
+
+| 处理机制 | 文件 |
+|---------|------|
+| 注册（特殊格式） | `server/routes/auth.ts:73` |
+| 通用创建响应 | `server/routes/content.ts:150`、`server/routes/prompt.ts:147` |
+
+---
+
+### 场景 4：更新成功 `200`
+
+**何时出现**：`PUT /api/content/:id`、`PUT /api/prompt/templates/:id`、`PUT /api/admin/users/:id` 等更新接口成功。
+
+```json
+{
+  "code": 200,
+  "data": {
+    "id": "a1b2c3d4-...",
+    "updated": true
+  },
+  "message": "更新成功"
+}
+```
+
+| 处理机制 | 文件 |
+|---------|------|
+| 内容更新 | `server/routes/content.ts:203` |
+| 模板更新 | `server/routes/prompt.ts:214` |
+| 用户更新（admin） | `server/routes/admin/users.ts:87` |
+
+---
+
+### 场景 5：删除成功 `200`
+
+**何时出现**：`DELETE /api/content/:id`、`DELETE /api/admin/users/:id` 等删除接口成功。
+
+```json
+{
+  "code": 200,
+  "data": {
+    "deleted": true
+  },
+  "message": "删除成功"
+}
+```
+
+> 批量删除返回 `{ code: 200, data: { deleted: 3 }, message: "批量删除成功" }`。清空操作返回 `{ code: 200, data: { cleared: true }, message: "清空成功" }`。
+
+| 处理机制 | 文件 |
+|---------|------|
+| 单条删除 | `server/routes/content.ts:242`、`server/routes/admin/contents.ts:56` |
+| 批量删除 | `server/routes/admin/contents.ts:69`、`server/routes/admin/generations.ts:52` |
+| 清空操作 | `server/routes/admin/generations.ts:63` |
+
+---
+
+### 场景 6：空列表 `200`
+
+**何时出现**：列表查询成功但数据库无匹配记录（新用户首次打开内容列表等）。
+
+```json
+{
+  "code": 200,
+  "data": [],
+  "message": "查询成功"
+}
+```
+
+> 空列表不是错误——HTTP 200 表示查询成功执行。客户端通过 `data.length === 0` 判断展示空状态。分页接口的空列表为 `{ code: 200, data: { items: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } }, message: "查询成功" }`。
+
+| 处理机制 | 文件 |
+|---------|------|
+| 空列表自然返回 | 所有列表路由（Repository 返回 `[]` 时直接 `{ data: [] }`） |
+| 空分页返回 | `server/utils/route-helpers.ts:46` `wrapPagination([], 0, ...)` |
+
+---
+
+### 场景 7：参数错误 `400`
+
+**何时出现**：请求体缺少必填字段、字段格式不符、批量操作 IDs 数组为空或超限。
+
+```json
+{
+  "code": "INPUT_ERROR",
+  "error": {
+    "data": [
+      { "field": "username", "message": "用户名至少 3 个字符" },
+      { "field": "password", "message": "密码至少 6 个字符" }
+    ]
+  },
+  "message": "用户名至少 3 个字符"
+}
+```
+
+> `code` 为 `INPUT_ERROR`；`message` 取第一个校验错误的描述；`error.data` 列出全部字段错误。
+
+| 处理机制 | 文件 | 说明 |
+|---------|------|------|
+| 字段校验 | `server/utils/validate.ts:45–172` | `validateUsername` / `validatePassword` / `validateEmail` / `validateRegisterInput` 等，返回 `ValidationResult` |
+| 路由转换 | `server/routes/auth.ts:39–43` | 将 `ValidationResult.errors` 转为 `res.status(400).json(...)` |
+| 批量 ID 校验 | `server/utils/route-helpers.ts:65–84` | `validateBatchIds()` 直接发送 400 响应并返回 `null` |
+| 必填字段校验 | `server/routes/generate.ts:34` | 路由内手动检查 `topic/platform/provider` 后发送 400 |
+
+---
+
+### 场景 8：未登录 `401`
+
+**何时出现**：请求头无 `Authorization`、Token 格式错误、Token 过期或签名无效。
+
+```json
+{
+  "code": "UNAUTHORIZED",
+  "message": "未登录，请先登录"
+}
+```
+
+> Token 过期时 `code` 为 `TOKEN_EXPIRED`，客户端应引导用户重新登录而非刷新 Token（当前无 refresh 端点）。
+
+| 处理机制 | 文件 | 触发条件 |
+|---------|------|---------|
+| 无 Token | `server/middleware/auth.ts:33–35` | `Authorization` 头缺失或不以 `Bearer ` 开头 |
+| Token 过期 | `server/middleware/auth.ts:49–51` | JWT `exp` 已过期 |
+| 登录失败 | `server/routes/auth.ts:116` | 用户名存在但密码不匹配 |
+| 用户不存在 | `server/routes/auth.ts:125` | 登录时查无此用户（统一返回 401 防枚举） |
+
+---
+
+### 场景 9：无权限 `403`
+
+**何时出现**：已登录用户尝试访问管理员接口、admin 尝试执行 super_admin 专属操作。
+
+```json
+{
+  "code": "FORBIDDEN",
+  "message": "需要管理员权限"
+}
+```
+
+| 处理机制 | 文件 | 触发条件 |
+|---------|------|---------|
+| admin 守卫 | `server/middleware/auth.ts:62–64` | `req.user.role` 不为 `admin` 或 `super_admin` |
+| super_admin 守卫 | `server/middleware/auth.ts:77–79` | `req.user.role` 不为 `super_admin` |
+| 用户自操作保护 | `server/routes/admin/users.ts:53,58` | admin 尝试修改 super_admin 用户 |
+| 密码重置保护 | `server/routes/admin/users.ts:153,158` | admin 尝试重置 super_admin 密码 |
+
+---
+
+### 场景 10：资源不存在 `404`
+
+**何时出现**：按 ID 查询/更新/删除的内容、模板、版本、用户不存在，或路由本身不存在。
+
+```json
+{
+  "code": "NOT_FOUND",
+  "message": "内容不存在"
+}
+```
+
+| 处理机制 | 文件 | 说明 |
+|---------|------|------|
+| 内容 | `server/routes/content.ts:88,182,235` | 查/改/删时 `repo.findById()` 返回 `null` |
+| 模板 | `server/routes/prompt.ts:79,179,246` | 查/改/删时模板不存在 |
+| 用户（admin） | `server/routes/admin/users.ts:48,107,148` | 管理面板查/改/删用户不存在 |
+| 路由不存在 | Express 默认 `Cannot GET /api/xxx` | 非 JSON 格式，前端应拦截并展示 404 页面 |
+
+---
+
+### 场景 11：系统异常 `500`
+
+**何时出现**：数据库连接断开、AI Provider 返回非预期响应、Parser 无法解析 AI 输出、未捕获的运行异常。
+
+```json
+{
+  "code": "UNKNOWN_ERROR",
+  "message": "内容列表查询失败"
+}
+```
+
+> Workflow 异常携带更强语义：`{ code: "PROVIDER_ERROR", message: "Gemini API 调用失败" }`。`generate.ts` 的 `statusMap` 将 `WorkflowErrorCode` 映射为 HTTP 状态码（`PROVIDER_ERROR` → `502`，其余 → `500`）。
+
+| 处理机制 | 文件 | 说明 |
+|---------|------|------|
+| 通用 500 | `server/utils/route-helpers.ts:84–92` | `handleError()` — admin 路由统一使用 |
+| 认证模块 500 | `server/routes/auth.ts:94,147,177,213` | `try/catch` 内手动组装 |
+| 内容/模板 500 | `server/routes/content.ts:57,96,153,206,245`、`server/routes/prompt.ts:48,87,150,217,256,287` | 路由内 `catch` 分支直接构造 |
+| Workflow 异常 | `server/routes/generate.ts:107–115` | `extractWorkflowError()` → `statusMap[code]` 映射 HTTP 状态 |
+| Provider 错误 | `server/routes/generate.ts:110` | `PROVIDER_ERROR` → HTTP `502` |
+| Parse 错误 | `server/routes/generate.ts:111` | `PARSE_ERROR` → HTTP `500`（AI 返回非 JSON） |
+| Validate 错误 | `server/routes/generate.ts:112` | `VALIDATE_ERROR` → HTTP `500`（内容不符合 Schema） |
+| DTO 错误 | `server/routes/generate.ts:113` | `DTO_ERROR` → HTTP `500`（无法注入 Metadata） |
+| 全局兜底 | **无全局中间件** | 未 catch 的异常会被 Express 默认处理器捕获，返回 HTML `Internal Server Error` 而非 JSON |
+
+---
+
+### 响应码速查
+
+| HTTP | 含义 | 示例场景 |
+|------|------|---------|
+| `200` | 成功 | 查询、更新、删除、空列表、批量操作 |
+| `201` | 创建成功 | 注册、新建内容、新建模板 |
+| `400` | 参数错误 | 缺少必填字段、格式不符、IDs 超限 |
+| `401` | 未登录/Token 失效 | 无 Authorization 头、Token 过期 |
+| `403` | 无权限 | 普通用户访问管理接口 |
+| `404` | 不存在 | 资源 ID 无效、路由不存在 |
+| `409` | 冲突 | 用户名/邮箱已存在、新旧密码相同 |
+| `500` | 系统异常 | 数据库故障、Parser 失败、未捕获异常 |
+| `502` | Provider 错误 | AI API 调用失败 |
+
+---
+
 ## 一、已实现接口（31 个，可直接测试）
+
+> **响应格式**：所有接口统一遵循[通用响应规范](#通用响应规范)，即 `{ code, data, message }`（成功）或 `{ code, message[, error.data] }`（失败）。认证模块的注册/登录/个人信息接口使用 `{ user, accessToken }` 特殊格式，健康检查使用 `{ status, db, timestamp }` 格式。
 
 ### 健康检查（1 个）
 

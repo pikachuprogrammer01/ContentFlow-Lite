@@ -1,6 +1,6 @@
 # ContentFlow Lite — 实现进度追踪
 
-> 最后更新：2026-07-05（二次更新）
+> 最后更新：2026-07-05（三次更新）
 > 基于 `docs/PRD.md`、`docs/SPEC.md`、`.rules/` 全部规范
 
 ---
@@ -96,7 +96,7 @@ Phase 0+1 已完成，后端核心链路跑通：
 | C8 | `server/middleware/auth.ts` | JWT 验证 | ✅ Bearer Token 守卫 |
 | C9 | `server/middleware/auth.ts` (adminGuard) | role=admin+ | ✅ 内联在 auth.ts 中 |
 | C10 | `server/middleware/rate-limit.ts` | 限流 | ✅ 登录 5/min + 生成 10/min |
-| C11 | `server/middleware/cors.ts` | CORS | 🔵 已内联到 app.ts（不需要单独文件） |
+| C11 | `server/middleware/cors.ts` | CORS | ✅ 已从 app.ts 抽离为独立文件 |
 | C12 | `server/db/repositories/*` | 4 个 repo | ✅ user/content/prompt/generation |
 | C13 | `server/db/api-key-store.ts` | AES-256-GCM + Redis | ❌ Phase 3 |
 | C14 | `server/admin/index.ts` | AdminJS 面板 | ❌ Phase 3 |
@@ -280,191 +280,9 @@ Phase 4: 测试与发布（E2E + 部署 + 文档收尾）
 
 #### Phase 3 — AdminJS + TypeORM + 权限系统（规划中，未实施）
 
-> 以下为 Phase 3 完整设计方案，待 Phase 2 完成后执行。
+> 完整设计见 **[docs/PHASE3_DESIGN.md](./PHASE3_DESIGN.md)** — 包含 RBAC 7 表设计、permissionGuard 中间件、data_scope 数据范围、API Key 加密存储、19 项权限码清单、TypeORM 12 Entity 迁移、AdminJS 面板、Redis 缓存策略、分步执行计划（8 步）、出口标准（15 项）。
 
-##### 3.1 SQL 注入审计（Phase 2 现状 → Phase 3 通过 TypeORM 消除）
-
-| 文件 | 行号 | 代码模式 | 判定 |
-|------|------|---------|:--:|
-| `user-repo.ts` | 85, 113 | `SET ${sets.join(', ')}` — 列名硬编码在 if 块中 | 🟢 安全 |
-| `prompt-repo.ts` | 54-63 | `key` 来自 `Object.entries(fields)` 后拼入 `${key} = ?`，TS 类型约束 | 🟡 中 |
-| `prompt-repo.ts` | 217-218 | `WHERE id IN (${placeholders})` — ids 走参数数组 | 🟢 安全 |
-| `content-repo.ts` | 139 | 同上 | 🟢 安全 |
-| `generation-repo.ts` | 87 | 同上 | 🟢 安全 |
-| 其余 36 处 | — | 全部 `?` 占位符 + 参数数组 | 🟢 安全 |
-
-**结论**：4 个 repo 共 41 次 SQL 调用，1 处潜在风险。Phase 3 用 TypeORM 后 100% 消除。
-
-##### 3.2 权限系统数据库设计
-
-**问题**：当前 `role ENUM` 无法扩展，无数据范围层，角色规则硬编码。
-
-**核心设计**：角色实体化 + 数据范围 + 用户级覆盖。
-
-```sql
--- 角色表（替代 ENUM，成为一等公民）
-CREATE TABLE roles (
-  id          VARCHAR(36)  PRIMARY KEY,
-  code        VARCHAR(64)  UNIQUE NOT NULL,  -- 'super_admin' | 'admin' | 'user' | 自定义
-  name        VARCHAR(64)  NOT NULL,
-  level       INT          DEFAULT 0,        -- super_admin=100, admin=50, user=10
-  is_system   TINYINT(1)   DEFAULT 0,        -- 系统内置角色，禁止删除/改 code
-  status      TINYINT(1)   DEFAULT 1,
-  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-
--- 用户-角色 多对多
-CREATE TABLE user_roles (
-  user_id VARCHAR(36) NOT NULL,
-  role_id VARCHAR(36) NOT NULL,
-  PRIMARY KEY (user_id, role_id),
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
-);
-
--- 权限定义表
-CREATE TABLE permissions (
-  id          VARCHAR(36)  PRIMARY KEY,
-  parent_id   VARCHAR(36)  DEFAULT NULL,
-  name        VARCHAR(64)  NOT NULL COMMENT '权限名称（中文）',
-  code        VARCHAR(128) NOT NULL UNIQUE COMMENT '权限标识（如 user:delete）',
-  type        ENUM('menu','button','api') NOT NULL DEFAULT 'api',
-  path        VARCHAR(255) DEFAULT NULL,
-  method      VARCHAR(10)  DEFAULT NULL COMMENT 'GET/POST/PUT/DELETE',
-  sort        INT          NOT NULL DEFAULT 0,
-  status      TINYINT(1)   NOT NULL DEFAULT 1,
-  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-
--- 角色-权限 + 数据范围
-CREATE TABLE role_permissions (
-  role_id       VARCHAR(36) NOT NULL,
-  permission_id VARCHAR(36) NOT NULL,
-  data_scope    ENUM('ALL','SELF') DEFAULT 'SELF',  -- 全部数据 / 仅自己创建
-  PRIMARY KEY (role_id, permission_id),
-  FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
-  FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
-);
-
--- 用户级权限覆盖（补丁层）
-CREATE TABLE user_permissions (
-  user_id       VARCHAR(36) NOT NULL,
-  permission_id VARCHAR(36) NOT NULL,
-  effect        ENUM('GRANT','DENY') NOT NULL,
-  expires_at    DATETIME NULL,               -- 支持临时授权
-  created_by    VARCHAR(36),
-  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (user_id, permission_id),
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-  FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
-);
-```
-
-**`roles.level` 用途**：替代 README 中"admin 不可删除 admin"这类硬编码规则，改为通用判断 — "A 能操作 B 当且仅当 A 最高角色 level > B 最高角色 level"。新增自定义角色时自动适用。
-
-**`data_scope` 设计选择**：挂在 `role_permissions` 上（而非若依原版的角色级），做到比若依更细：同一 admin 对 `content:list` 可以是 ALL，对 `apikey:list` 可单独设为 SELF。后续扩展 TEAM 值时只需加枚举值 + `role_permissions` 挂 `team_id`。
-
-##### 3.3 权限中间件 + 数据范围
-
-**JWT 简化**：Token 只放 `userId`，不存角色。权限变更走缓存生效（120s 内刷新），无需重新登录。
-
-```ts
-// server/services/permission-service.ts
-type DataScope = 'ALL' | 'SELF';
-type EffectivePermissions = Map<string, DataScope>;
-
-async function getEffectivePermissions(userId: string): Promise<EffectivePermissions> {
-  const cached = await permissionCache.get(`perm:${userId}`);
-  if (cached) return cached;
-
-  const roleIds   = await userRoleRepo.getRoleIds(userId);
-  const rolePerms = await rolePermissionRepo.getByRoleIds(roleIds);
-  const overrides = await userPermissionRepo.getByUserId(userId);
-
-  const effective: EffectivePermissions = new Map();
-  // 多角色取并集，同一 code 取更宽的 scope
-  for (const p of rolePerms) {
-    const cur = effective.get(p.code);
-    if (!cur || (cur === 'SELF' && p.dataScope === 'ALL'))
-      effective.set(p.code, p.dataScope);
-  }
-  // 用户覆盖：DENY 摘除，GRANT 补上
-  for (const o of overrides) {
-    if (o.expiresAt && o.expiresAt < new Date()) continue;
-    if (o.effect === 'DENY')  effective.delete(o.code);
-    if (o.effect === 'GRANT') effective.set(o.code, effective.get(o.code) ?? 'ALL');
-  }
-
-  await permissionCache.set(`perm:${userId}`, effective, { ttlSeconds: 120 });
-  return effective;
-}
-```
-
-```ts
-// permissionGuard — 替代 adminGuard / superAdminGuard
-export function permissionGuard(code: string) {
-  return async (req, res, next) => {
-    const scope = (await getEffectivePermissions(req.user.id)).get(code);
-    if (!scope) return res.status(403).json({ error: 'FORBIDDEN', code });
-    req.dataScope = scope;  // 下发给 repository 层
-    next();
-  };
-}
-```
-
-```ts
-// 路由层：只声明权限码
-router.get('/api/content', authMiddleware, permissionGuard('content:list'), handler);
-
-// Repository 层：根据 data_scope 过滤数据（关键！很多系统漏掉这层）
-async function listContents(userId: string, scope: 'ALL' | 'SELF') {
-  return scope === 'SELF'
-    ? db.query('SELECT * FROM contents WHERE owner_id = ? ORDER BY created_at DESC', [userId])
-    : db.query('SELECT * FROM contents ORDER BY created_at DESC');
-}
-```
-
-**缓存策略**：Redis 已配置 → 连接成功用 Redis → 失败静默降级内存。无 Redis 配置 → 静默走内存。**无控制台交互**。
-
-##### 3.4 TypeORM 替换 mysql2
-
-12 个 Entity（User/Content/PromptTemplate/PromptVersion/GenerationRecord/UserSetting/PublishRecord/AppLog/Role/Permission/RolePermission/UserPermission）。DataSource `synchronize: true`，保留 `schema.ts` 为手动建表参考。改造 `auth/content/generate/prompt` 四个路由 + `middleware/auth.ts`。**删除 `db/repositories/` 全部旧文件 + `routes/admin/` 全部手写子路由**。
-
-##### 3.5 AdminJS 面板
-
-`/admin` 替代自定义面板。复用 JWT authenticate。每个 Resource action 通过 `before` hook 对接 `permissionGuard`。Dashboard 统计卡片 + 趋势图。自定义 Action：重置密码/批量删除/清空生成记录。
-
-##### 3.6 前端
-
-侧边栏导航替代顶部导航。`/admin` 由 AdminJS 服务端接管，移除 `AdminPage.vue` + 5 个 Tab 组件。
-
-##### 3.7 分步执行
-
-| # | 步 | 内容 |
-|---|-----|------|
-| 1 | TypeORM + 新表 | 依赖 + DataSource + 12 Entity + roles/permissions 初始化 Seeder |
-| 2 | 权限服务 + 中间件 | getEffectivePermissions + permissionGuard + 缓存降级 |
-| 3 | 用户迁移 | users.role ENUM → user_roles 多对多映射，JWT 去 role |
-| 4 | 路由改造 | auth/content/generate/prompt → TypeORM + dataScope 过滤 |
-| 5 | AdminJS 面板 | authenticate + Resource 按角色 + Action 按权限 + Dashboard |
-| 6 | 前端适配 | 侧边栏 + /admin 接管 + 删旧组件 |
-| 7 | 文档 + Phase Gate | README/SPEC/PRD/CLAUDE 同步 + phase-3-done tag |
-
-##### 3.8 出口标准
-
-- ✅ 3 个系统角色 + 可扩展自定义角色，`level` 层级规则生效
-- ✅ `permissionGuard` 按权限码 + `data_scope` 双重管控
-- ✅ Repository 层通过 `scope` 参数过滤数据行（不漏数据）
-- ✅ JWT 仅含 `userId`，权限变更 120s 内生效
-- ✅ 用户级 `user_permissions` 覆盖（GRANT/DENY + 过期）可用
-- ✅ AdminJS `/admin` 可用，侧边栏按角色渲染
-- ✅ Redis 未配置时静默内存缓存
-- ✅ 旧 mysql2 repo + admin 子路由全部移除
-- ✅ `POST /api/generate` 端到端仍然可用
-- ✅ 前端 `pnpm build` 成功
-
+#### Phase 4
 #### Phase 4 — 测试与发布
 
 | 任务 | 验证 |
@@ -580,3 +398,95 @@ async function listContents(userId: string, scope: 'ALL' | 'SELF') {
 | 2.11 | HistoryPage | 历史列表 + 分页 | 列表渲染 + 点击查看 |
 
 **出口标准**：浏览器全流程走通（注册 → 登录 → 生成 → 编辑 → 导出）
+
+
+---
+
+## 六、2026-07-05 会话变更记录（三次更新）
+
+### 6.1 统一响应格式
+
+后端所有 API 响应归一到 `{ code, data, message }`（成功）/ `{ code, message[, error.data] }`（失败）信封格式。
+
+| 新增/改造 | 文件 | 说明 |
+|-----------|------|------|
+| 新建 | `server/utils/response.ts` | `success(data,msg)` / `created(data,msg)` / `fail(code,msg,errors?)` 工厂函数 |
+| 改造 | `server/middleware/auth.ts` | 5 处 401/403 → `fail()` |
+| 改造 | `server/middleware/rate-limit.ts` | 3 个 limiter message → `fail()` |
+| 改造 | `server/utils/route-helpers.ts` | `handleError` / `validateBatchIds` → `fail()` |
+| 改造 | `server/routes/auth.ts` | 12 处错误 → `fail()`；登录/注册/me 特殊格式保留 |
+| 改造 | `server/routes/content.ts` | 9 处 → `success`/`created`/`fail` |
+| 改造 | `server/routes/generate.ts` | 3 处 → `success`/`fail` |
+| 改造 | `server/routes/prompt.ts` | 12 处 → `success`/`created`/`fail` |
+| 改造 | `server/routes/admin/{users,contents,generations,prompts}.ts` | 全部响应 → `success`/`fail` |
+| 适配 | `client/src/utils/api-client.ts` | 错误拦截器适配新 `code`/`message` 顶层字段；成功拦截器 `res.data?.data` 解包逻辑不变 |
+| 适配 | `client/src/stores/content.ts` | `res.content` → `res`（拦截器已解包 data 层） |
+
+### 6.2 CORS 中间件抽离
+
+| 文件 | 改动 |
+|------|------|
+| `server/middleware/cors.ts` | **新建** — 从 `config.cors.origin` 读取来源 |
+| `server/app.ts` | 删除内联 `cors({...})`，改为 `app.use(corsMiddleware)` |
+
+### 6.3 Mock Provider 数据对齐
+
+mock provider 返回的 `pages` 字段从 `{ title, content }` 改为 `{ id, text }`，与 Page DTO 定义一致。修复了生成后正文板块为空的问题。
+
+### 6.4 前端体验修复
+
+| 问题 | 文件 | 修复 |
+|------|------|------|
+| 正文板块两输入框抢同一字段 | `client/src/pages/EditPage.vue` | 删除重复标题输入框，每页面只保留一个 textarea |
+| 历史页删除无确认框 | `client/src/pages/HistoryPage.vue` | 添加 `NPopconfirm` 包裹删除按钮 |
+| `onTabChange` 函数缺闭合 `}` | `client/src/pages/LoginPage.vue` | 补全函数体 |
+
+### 6.5 权限与角色
+
+| 问题 | 文件 | 修复 |
+|------|------|------|
+| 编辑用户含 super_admin 选项 | `client/src/components/admin/UserTab.vue` | 移除 `super_admin` 角色选项（超级管理员唯一，不可通过面板分配） |
+
+### 6.6 新增文档
+
+| 文件 | 说明 |
+|------|------|
+| `docs/ARCHITECTURE_REVIEW.md` | 后端架构验收报告：目录职责定义、实际代码与文档差异对比、9 项改进建议 |
+| `docs/ARCHITECTURE_DRILL.md` | 最小模块演练：`PATCH /api/content/:id/pages/:pageIndex` 完整分层链路演示 |
+| `docs/API_SPEC.md` §通用响应规范 | 11 种场景（列表/详情/创建/更新/删除/空列表/参数错误/未登录/无权限/不存在/系统异常）的响应示例 + 处理机制文件引用 |
+
+### 6.7 已知待办（未在本次会话处理）
+
+- adminGuard 拆分为独立文件（`middleware/admin-guard.ts`）
+- `routes/admin.ts` shim 文件删除
+- SiliconFlow / 通义万相 Provider 补全
+- Redis 缓存层
+- API Key 加密存储
+
+### 6.8 全局异常处理机制（2026-07-05）
+
+| 新增/改造 | 文件 | 说明 |
+|-----------|------|------|
+| 新建 | `server/middleware/error-handler.ts` | `AppError` → HTTP 状态码映射 + `asyncHandler` 包装器（替代手动 try/catch） |
+| 新建 | `server/utils/errors.ts` | `AppError` 基类 + 7 子类（NotFound/Validation/Forbidden/Conflict 等） |
+| 改造 | `server/app.ts` | 末尾注册 `globalErrorHandler`；添加 404 兜底路由 |
+| 改造 | `server/routes/content.ts` | 移除所有 `try/catch` + 手写 `res.status().json`，改为 `asyncHandler` + `throw AppError` + `success()` |
+| 改造 | `server/routes/prompt.ts` | 同上 |
+| 改造 | `server/routes/admin/{users,contents,generations,prompts}.ts` | 同上 + 删除 `handleError` + `validateBatchIds` 改为 throw 模式 |
+| 改造 | `server/middleware/rate-limit.ts` | `message` → `handler`，统一用 `fail()` 产出响应 |
+| 简化 | `server/utils/route-helpers.ts` | `validateBatchIds` 去掉 `res` 参数改为 throw；删除 `handleError` 函数 |
+
+### 6.9 内容管理面板增强（2026-07-05）
+
+| 类别 | 文件 | 说明 |
+|------|------|------|
+| 后端 | `server/db/repositories/content-repo.ts` | `listAll()` 改为 `LEFT JOIN users` 返回 `username` |
+| 后端 | `server/db/repositories/user-repo.ts` | `listAll()` 加上 `updated_at` |
+| 后端 | `server/routes/admin/contents.ts` | 列表输出加 `username`；新增 `GET /contents/:id` 详情端点 |
+| 后端 | `server/routes/admin/users.ts` | 用户列表输出加 `updatedAt` |
+| 前端 | `client/src/components/admin/ContentTab.vue` | 用户名列、列拆分（标题/页数独立）、标签 Tooltip、详情弹窗（NSkeleton 骨架屏 → 完整内容）、复制全文（buildTxt）、导出 TXT/MD/JSON |
+| 前端 | `client/src/components/admin/UserTab.vue` | 修改时间列、编辑自己角色禁选+提示、编辑/重置密码弹窗含 NFormItem label 提示 |
+
+### 6.10 Page/Title 类型修复
+
+`ContentDetail` 改为 `Pick<Content, ...>` 直接复用 `shared/types/content.ts`，避免前端自造错误的字段名（原 `{ number, title, content }` → 正 `{ id, order, text }`）。

@@ -205,6 +205,44 @@ Express 后端是整个系统唯一的外部接口层。
 - 调用 AI Provider
 - 拼接 Prompt
 
+#### 统一响应格式
+
+所有 API 端点采用统一信封结构，由 `server/utils/response.ts` 提供工厂函数：
+
+**成功响应 `{ code, data, message }`：**
+
+```json
+{ "code": 200, "data": <业务数据>, "message": "操作成功" }
+```
+
+- `code`：HTTP 状态码（数字）
+- `data`：业务数据（对象/数组/null）
+- `message`：中文描述
+
+**错误响应 `{ code, message[, error.data] }`：**
+
+```json
+{ "code": "INPUT_ERROR", "message": "用户名至少 3 个字符", "error": { "data": [{ "field": "username", "message": "..." }] } }
+```
+
+- `code`：错误码字符串（`INPUT_ERROR` / `UNAUTHORIZED` / `FORBIDDEN` / `NOT_FOUND` / `CONFLICT` / `UNKNOWN_ERROR` 等）
+- `message`：中文错误描述
+- `error.data`：仅参数校验失败时存在，列出字段级错误
+
+**工厂函数**：
+
+| 函数 | HTTP | 用途 |
+|------|------|------|
+| `success(data, msg?)` | 200 | 查询、更新、删除成功 |
+| `created(data, msg?)` | 201 | 创建资源成功 |
+| `fail(code, msg, errors?)` | — | 错误响应，路由自行设 `res.status()` |
+
+**特殊格式例外**：
+- 认证模块（注册/登录/个人信息）：`{ user: {...}, accessToken: "..." }`（无 code/data 信封）
+- 健康检查：`{ status, db, timestamp }`
+
+响应规范详情见 `docs/API_SPEC.md` §通用响应规范。
+
 ***
 
 ### Workflow 层
@@ -419,23 +457,20 @@ src
 
 ## 4.1 目录设计规范
 
-项目目录按照职责划分，而不是按照页面划分。
+项目目录按职责划分，不按页面划分。实际 monorepo 结构见 **[README.md](../README.md#目录结构)** 和 **[ARCHITECTURE_REVIEW.md](./ARCHITECTURE_REVIEW.md#一目录结构现状)**。
 
-各目录职责如下：
+各模块职责如下：
 
-- `pages`：仅存放页面，不允许编写业务逻辑。
-- `components`：存放可复用组件，不依赖具体业务。
-- `workflow`：整个系统唯一流程调度中心。
-- `prompt`：负责 Prompt 构建、模板管理、版本管理。
-- `parser`：负责数据校验、解析、标准化及 DTO 构建。
-- `providers`：负责 AI 模型调用，不包含业务逻辑。
-- `exporter`：负责 Markdown、JSON 等导出能力。
-- `repositories`：统一数据存取接口，不允许直接操作 LocalStorage。
-- `models`：存放领域模型和 DTO，不包含业务代码。
-- `services`：封装通用业务服务。
-- `utils`：存放纯工具函数，不依赖业务模块。
+- **`client/src/pages/`**：仅存放页面组件，不允许编写业务逻辑。
+- **`client/src/components/`**：可复用组件，不依赖具体业务。
+- **`server/workflow/`**：系统唯一流程调度中心。
+- **`server/providers/`**：AI 模型调用，通过注册表管理，不包含业务逻辑。
+- **`server/db/repositories/`**：统一数据存取接口，路由/Workflow 唯一数据库入口。
+- **`shared/src/types/`**：领域模型与 DTO，客户端/服务端唯一类型来源。
+- **`server/utils/`**：纯工具函数，不依赖业务模块。
+- **`client/src/exporter/`**：Markdown、JSON 导出能力。
 
-任何模块都应放置在其职责对应的目录中，禁止出现职责混乱或跨模块存放代码的情况。
+任何模块都应放置在其职责对应的目录中，禁止职责混乱或跨模块存放代码。
 
 # 5. 核心模块设计
 
@@ -1970,47 +2005,63 @@ Output Node
 
 ***
 
-# 附录 D：架构设计决策（Architecture Decision Record）
+> ADR 已独立为 **[docs/ADR.md](./ADR.md)**  
+> 部署方案与 API 文档方案保留在本文件
 
-为了保证系统具备良好的可维护性和扩展能力，项目采用以下核心设计决策。
+---
 
-**为什么使用 Content DTO？**
+## 全局异常处理机制（2026-07-05 新增）
 
-统一数据结构，避免多个模块维护不同的数据格式，降低模块之间的耦合度。
+### 架构
 
-**为什么记录 Prompt Version？**
+```
+Route/Middleware 抛出 AppError
+        │
+        ▼
+asyncHandler() 捕获 Promise rejection
+        │
+        ▼
+globalErrorHandler (4-arg Express 中间件)
+        │
+   ┌────┴────┐
+   │         │
+AppError   未知 Error
+   │         │
+   ▼         ▼
+fail()      fail()
+   │         │
+   ▼         ▼
+res.json() res.json()
+```
 
-保证每一次内容生成都可追溯、可复现，便于 Prompt 持续优化及效果对比。
+### 异常类族 (`server/utils/errors.ts`)
 
-**为什么采用 Workflow Engine？**
+| 类 | HTTP | code | 使用场景 |
+|----|------|------|---------|
+| `AppError` | — | — | 基类，不可直接使用 |
+| `ValidationError` | 400 | `INPUT_ERROR` | 参数缺失/格式不合法 |
+| `AuthError` | 401 | `UNAUTHORIZED` | Token 缺失/无效/过期 |
+| `ForbiddenError` | 403 | `FORBIDDEN` | 权限不足 |
+| `NotFoundError` | 404 | `NOT_FOUND` | 资源不存在 |
+| `ConflictError` | 409 | `CONFLICT` | 资源冲突（如用户名已存在） |
+| `RateLimitError` | 429 | `RATE_LIMITED` | 请求过于频繁 |
+| `WorkflowError` | 动态映射 | 动态 | Workflow 节点失败（含 node 标识） |
 
-统一所有业务入口，避免页面直接调用各业务模块，保证流程一致性。
+### 使用方式
 
-**为什么采用 Repository 模式？**
+```ts
+// 旧方式（逐步淘汰）
+res.status(400).json(fail('INPUT_ERROR', '用户名不能为空'));
 
-隔离业务逻辑与存储实现，前端通过 HttpRepository 调后端 API，后端 Repository 封装数据库操作。方便未来替换数据库实现而不影响业务代码。
+// 新方式（推荐）
+throw new ValidationError('用户名不能为空');
+```
 
-**为什么采用插件式 Exporter？**
+### 已改造模块
 
-降低新增导出格式的开发成本，实现 Markdown、JSON、HTML、PDF 等导出能力的持续扩展，而无需修改核心业务代码。
-
-# 14. 部署方案
-
-| 组件 | 平台 | 说明 |
-|------|------|------|
-| 前端 | **GitHub Pages** | 静态 SPA，`vite build` 后部署。路由使用 hash 模式 |
-| 后端 | **Vercel** | Express API，Node.js 运行时。通过 `vercel.json` 配置 |
-| 数据库 | 用户自备 | MySQL 兼容（本地/TiDB/MariaDB/RDS），通过 `.env` 的 `DB_*` 变量配置连接 |
-
-不做 Docker 封装，不做移动端适配，不做国际化。
-
-# 15. API 文档方案
-
-使用 **swagger-jsdoc + @scalar/express-api-reference**：
-
-- 路由上写 JSDoc 注释（`@swagger`），自动生成 OpenAPI spec
-- `@scalar/express-api-reference` 渲染现代 API 文档页（挂载 `/api-docs`）
-- 不单独维护手写 API 文档文件
-- 注释中的 summaries/descriptions 使用中文
-
-以上设计决策属于系统长期约束，新功能开发应优先遵循本规范，而不是修改既有架构。
+| 模块 | 状态 |
+|------|------|
+| `middleware/auth.ts` | ✅ 抛出 AuthError / ForbiddenError |
+| `routes/auth.ts` | ✅ asyncHandler + throw |
+| `routes/generate.ts` | ✅ asyncHandler + throw WorkflowError |
+| 其余路由 | ⬜ 渐进迁移中（仍使用旧模式，受全局 handler 兜底保护） |

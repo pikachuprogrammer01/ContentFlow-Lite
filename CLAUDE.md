@@ -1,105 +1,134 @@
-# ContentFlow Lite - CLAUDE.md
+# ContentFlow Lite — 项目统筹
 
-## 系统定位
-
-ContentFlow Lite 是一个基于 Workflow 的结构化 AI 内容生成框架，核心三要素：
-
-- **Workflow** — 7 节点 Pipeline 流程编排（Input → Prompt → Provider → Parse → Validate → DTO → Output）
-- **Prompt Version** — 提示词版本控制，每次修改生成新版本，不可覆盖
-- **Content DTO** — 统一数据结构，所有 AI 输出必须转换为此格式
-- **@contentflow/shared** — 共享类型包，客户端与服务端唯一类型源
+> 本文件是 AI 协作者的唯一入口。接到任务后先读本文件，根据任务类型找到对应文档，再动手。
 
 ---
 
-## 执行原则（最高优先级）
+## 一、系统本质
 
-1. **先读规则，再动手** — 根据任务类型读取 `.rules/` 下对应模块，理解约束后再编码
-2. **所有生成必须经过 Workflow** — 不允许绕过 Workflow 直接调用 Provider
-3. **所有 AI 输出必须转为 Content DTO** — 系统只能存在一套 Content DTO
-4. **Prompt 修改 = 新版本** — 永远不覆盖已有 Prompt Version
-5. **按职责分层，不跨层** — 路由只做校验 → Repository 只做 CRUD → Provider 只做调用
+ContentFlow Lite 是 **Workflow 驱动的 AI 内容生成系统**。三要素：
 
----
+| 要素 | 含义 | 不可变规则 |
+|------|------|-----------|
+| **Workflow** | 7 节点 Pipeline（Input→Prompt→Provider→Parse→Validate→DTO→Output） | 所有生成必须经过 Workflow，不可绕过 |
+| **Content DTO** | 全系统唯一数据结构 | AI 输出必须转为 Content DTO，不存在第二套 |
+| **Prompt Version** | 不可变版本快照 | 每次修改生成新版本，永不覆盖历史 |
 
-## 规则索引
-
-根据任务类型读取对应规则文件（均在 `.rules/` 下）：
-
-| 任务类型 | 规则文件 | 关键约束 |
-|---------|---------|---------|
-| Workflow / 生成流程 | `workflow.mdc` | 7 节点串行、Validate 重试 ≤3 次、数据流单向 |
-| Prompt / 模板 | `prompt.mdc` | Template 结构、OutputSchema、版本不可覆盖 |
-| 数据结构 / DTO | `architecture.mdc` | Content DTO 唯一定义、Page/Title/Cover 结构 |
-| UI / 前端 | `ui.mdc` | Naive UI 优先、UI 只渲染 DTO、禁止业务逻辑 |
-| 编码规范 | `coding.mdc` | TypeScript 严格模式、Vue Composition API、分层约束 |
-| AI Provider | `provider.mdc` | 用户手动选择 Provider、不自动切换、Key 即用 |
-| 后端 / 数据库 | `backend.mdc` | Express 分层、8 张表、JWT + bcrypt、限流 |
-| 日志 | `logging.mdc` | Winston 5 级日志、禁止 console.log、DB Transport |
-| Phase Gate | `docs/PHASE_GATE.md` | `pnpm phase:advance` 唯一入口、禁手动改 .phase |
-
-补充参考：
-- **类型定义** → `docs/types.md`（FinalPrompt / OutputSchema / Provider 接口等）
-- **项目进度** → `PROGRESS.md`（当前 Phase + 待完成任务）
-- **API 文档** → 后端 JSDoc 注释自动生成 Scalar UI（`/api-docs`），不单独维护手写文档
+技术栈：Vue 3 + Express 5 + MySQL 兼容 + pnpm monorepo（`client/` `server/` `shared/`）
 
 ---
 
-## 系统执行链路
+## 二、任务路由
+
+| 任务类型 | 先读 | 再读 | 然后 |
+|---------|------|------|------|
+| **开发新功能** | `docs/PRD.md`（需求） | `docs/SPEC.md`（架构） | 对应 `.rules/` + 编码 |
+| **修改后端架构** | `docs/SPEC.md`（分层模型） | `docs/ARCHITECTURE_REVIEW.md`（目录职责） | `docs/FRAMEWORK_AUDIT.md`（封装边界） |
+| **写/改 API** | `docs/API_SPEC.md`（接口规范） | `.rules/backend.mdc`（后端约束） | 写 JSDoc → 自动生成文档 |
+| **写前端页面** | `.rules/ui.mdc` | `docs/types.md`（DTO 定义） | 只渲染 DTO，不写业务逻辑 |
+| **改 Prompt** | `.rules/prompt.mdc` | `docs/types.md` §三（OutputSchema） | 永远新增版本 |
+| **改数据库** | `.rules/backend.mdc` | `server/db/schema.ts`（8 表 DDL） | 通过 Repository，不裸写 SQL |
+| **新增 AI 模型** | `.rules/provider.mdc` | `server/providers/index.ts`（注册表） | 新建文件 + 自注册，不改 Workflow |
+| **改日志** | `.rules/logging.mdc` | `server/utils/logger.ts` | 禁止 console.log |
+| **判断能否开始写业务** | — | `docs/IMPLEMENTATION_READINESS.md` | 20 项验收结果 |
+| **推进 Phase** | `docs/PHASE_GATE.md` | `docs/PROGRESS.md`（当前状态） | `pnpm phase:advance` 唯一入口 |
+
+---
+
+## 三、核心约束（不可协商）
+
+### 分层边界
+
+| 层 | 允许 | 禁止 |
+|----|------|------|
+| `client/src/pages/` | 渲染 DTO、用户交互 | 业务逻辑、直接调 AI |
+| `client/src/stores/` | 状态管理、调 `api-client.ts` | 直接 fetch/axios |
+| `server/routes/` | 参数校验、调 Workflow/Repository、响应格式化 | 业务逻辑、写 SQL、调 Provider |
+| `server/workflow/` | 7 节点编排、调 Provider、调 Parser | 写 SQL、操作 req/res |
+| `server/providers/` | 调 AI SDK、返回原始文本 | 数据库操作、解析内容 |
+| `server/db/repositories/` | CRUD、行→DTO 转换 | 业务逻辑、调 Provider |
+| `server/utils/` | 纯函数工具 | 业务逻辑、数据库操作 |
+
+### 绝对禁止
+
+1. 绕过 Workflow 直接调 AI Provider
+2. 在路由/Workflow 中写裸 SQL（必须走 Repository）
+3. 覆盖已有 Prompt Version（必须新建版本）
+4. 使用 `console.log`（必须用 `createLogger`）
+5. 裸读 `process.env`（必须通过 `config.ts`）
+6. 裸调 `mysql2.createConnection`（必须通过 `getPool()`）
+7. 前端含业务逻辑（如 if/else 判断平台差异）
+8. 手动改 `.phase` 文件
+9. `git push --no-verify`
+
+---
+
+## 四、文档地图
+
+| 场景 | 看什么 | 一句话描述 |
+|------|--------|-----------|
+| 新人上手 | `README.md` | 项目 landing page，5 分钟了解全貌 |
+| 理解需求 | `docs/PRD.md` | 产品要做什么，用户是谁，MVP 边界 |
+| 理解架构 | `docs/SPEC.md` | 六层架构、模块职责、Workflow 链路 |
+| 理解为什么这样设计 | `docs/ADR.md` | 5 个关键架构决策的记录 |
+| 查 API | `docs/API_SPEC.md` | 50 个接口的请求/响应规范 + 通用信封格式 |
+| 写 API 测试 | `docs/API_TEST.md` | 23 个未测接口的 Apifox 用例模板 |
+| 写 TypeScript | `docs/types.md` | 所有 DTO/接口/类型的唯一定义源 |
+| 看进度 | `docs/PROGRESS.md` | 8 模块 × 3 Phase 实现状态 |
+| 推进流程 | `docs/PHASE_GATE.md` | `pnpm phase:advance` 机制详解 |
+| Phase 3 计划 | `docs/PHASE3_DESIGN.md` | RBAC·TypeORM·AdminJS·Redis 完整设计 |
+| 审计后端架构 | `docs/ARCHITECTURE_REVIEW.md` | 目录职责·分层评分·文档差异·改进建议 |
+| 验证规则落地 | `docs/ARCHITECTURE_DRILL.md` | `POST /api/generate` 全链路逐层追踪 |
+| 判断能否写业务 | `docs/IMPLEMENTATION_READINESS.md` | 20 项验收 + 是否阻塞业务开发 |
+| 审计框架复用 | `docs/FRAMEWORK_AUDIT.md` | Express 能力利用率 + 封装合理性 |
+
+---
+
+## 五、当前状态
+
+| 维度 | 状态 |
+|------|:--:|
+| 当前 Phase | Phase 2（前端重构）→ Phase 3（规划中） |
+| 编译 | server `tsc --noEmit` ✅ · client `vue-tsc --noEmit` ✅ |
+| 数据库 | TiDB Cloud · 8 张表 · 连接正常 |
+| 20 项验收 | 🔴 0 阻塞 · 🟡 6 债务（Phase 3） · 🟢 14 通过 |
+| 业务开发 | ✅ 可进入 |
+
+查最新状态：`cat .phase` + `pnpm phase:status` + `docs/PROGRESS.md`
+
+---
+
+## 六、快速参考
+
+```bash
+# 开发
+pnpm install                     # 安装依赖
+cd server && pnpm dev            # 后端：tsx watch → :3001
+cd client && pnpm dev            # 前端：vite → :5173
+curl http://localhost:3001/health  # 健康检查
+
+# 代码质量
+cd server && npx tsc --noEmit    # 后端类型检查
+cd client && npx vue-tsc --noEmit # 前端类型检查
+
+# Phase 管理
+pnpm phase:status                # 查看当前 Phase
+pnpm phase:advance               # 推进 Phase（唯一入口）
+```
+
+### 关键目录
 
 ```
-前端 UI (Vue 3 + Naive UI)
- ↓  POST /api/generate
-Express 后端 (JWT → Rate Limit → Workflow)
- ↓  7 节点 Pipeline
-Provider 层 (Gemini 2.0 Flash / DeepSeek V4 Flash)
- ↓  原始文本
-Parser → Validate (失败重试 ≤3) → Content DTO
- ↓
-持久化 (MySQL 兼容 DB) + 返回前端
+server/routes/          ← API 路由（auth/content/generate/prompt/admin）
+server/workflow/nodes/  ← 7 节点（不可单独调，必须经 index.ts）
+server/providers/       ← AI 模型（自注册，新增只加文件）
+server/db/repositories/ ← 数据访问（路由/Workflow 唯一 DB 入口）
+server/middleware/       ← 认证/限流/CORS
+server/utils/           ← 纯工具（logger/validate/response/route-helpers）
+shared/src/types/       ← 共享类型（auth/common/content/prompt/provider/workflow）
+client/src/pages/       ← 页面组件（只渲染 DTO）
+client/src/stores/      ← Pinia 状态管理
+client/src/utils/       ← api-client（axios 封装）
+docs/                   ← 13 个文档文件
+.rules/                 ← 9 个 AI 开发规则
 ```
-
----
-
-## 硬性约束
-
-### 代码边界
-
-- **前端不处理业务逻辑** — 只负责渲染 DTO 和用户交互
-- **后端路由不含业务逻辑** — 只做参数校验，业务在 Workflow/Service 层
-- **数据库操作走 Repository** — 不允许在路由或 Workflow 中直接写 SQL
-- **Provider 不可绕过** — 所有 AI 调用必须通过 Provider 接口，不做裸调 SDK
-- **原生 API 必须封装** — 浏览器 API（fetch/localStorage）和 Node API（fs/path/crypto）只要超过一处使用，必须封装为统一模块，禁止散落裸调
-
-### 数据边界
-
-- **Content DTO 唯一** — 不存在第二套内容数据结构
-- **Prompt 不可覆盖** — 每次修改生成新的 `prompt_versions` 记录
-- **前后端类型各自维护** — `server/types.ts` 是后端 source of truth，`client/src/types/` 对齐 API 契约
-
-### 操作边界
-
-- **禁止手动改 `.phase`** — Phase 推进必须走 `pnpm phase:advance`
-- **禁止 `git push --no-verify`** — 绕过 pre-push hook 的 push 会被 CI 拦截
-- **禁止 `console.log`** — 必须通过 Logger 模块（前端 `loglevel`，后端 `winston`）
-- **每完成一个 Milestone 更新 `PROGRESS.md`**
-
-### 安全边界
-
-- JWT Token 存 localStorage + helmet CSP 防 XSS
-- 密码 bcrypt (cost=12)，API Key AES-256-GCM 加密存储
-- 限流：登录 5/min/IP，生成 10/min/用户
-- 数据库不可用时 App 不可用（无离线模式，不做 localStorage 缓存）
-
----
-
-## 技术栈速览
-
-| 层 | 技术 |
-|----|------|
-| 前端 | Vue 3 + Naive UI + Pinia + Vite（`client/`） |
-| 后端 | Express 5 + TypeScript + tsx（`server/`） |
-| 数据库 | MySQL 兼容（TiDB / MariaDB / PlanetScale）— 8 张表 |
-| 认证 | JWT（jsonwebtoken）+ bcryptjs |
-| AI | Gemini 2.0 Flash / DeepSeek V4 Flash（用户手动选择） |
-| 日志 | Winston（5 级 + DB Transport） |
-| 包管理 | pnpm workspace（`pnpm-workspace.yaml`） |

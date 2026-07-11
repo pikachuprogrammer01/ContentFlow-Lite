@@ -106,7 +106,14 @@ graph TD
 ```
 ContentFlow-Lite/
 ├── shared/                     # 🆕 共享类型包（@contentflow/shared）
-│   ├── src/types.ts            # 核心类型 — 客户端/服务端唯一类型源
+│   ├── src/types/              # 核心类型定义（客户端/服务端唯一类型源）
+│   │   ├── index.ts            # barrel 重导出
+│   │   ├── auth.ts             # 用户/Token 类型
+│   │   ├── common.ts           # 分页/通用响应/Repository 接口
+│   │   ├── content.ts          # Content DTO / Page / Title / Cover
+│   │   ├── prompt.ts           # FinalPrompt / OutputSchema / PromptTemplate
+│   │   ├── provider.ts         # AIProvider / ImageProvider 接口
+│   │   └── workflow.ts         # WorkflowInput / WorkflowErrorCode
 │   └── src/constants.ts        # 共享常量（平台、Provider、默认值）
 │
 ├── client/                     # 前端（Vue 3 + Naive UI + Vite）
@@ -156,9 +163,9 @@ ContentFlow-Lite/
 │   │       ├── generations.ts  # 生成记录管理
 │   │       └── prompts.ts      # Prompt 模板/版本管理
 │   ├── middleware/             # 中间件
-│   │   ├── auth.ts             # JWT 守卫 + adminGuard
-│   │   └── rate-limit.ts       # 限流（登录/生成/重置密码）
-│   │   └── rate-limit.ts       # 限流配置
+│   │   ├── auth.ts             # JWT 守卫 + adminGuard / superAdminGuard
+│   │   ├── cors.ts             # CORS 跨域配置
+│   │   └── rate-limit.ts       # 限流（登录 5/min + 生成 10/min + 重置密码 3/min）
 │   ├── workflow/               # 7 节点 Pipeline
 │   │   ├── index.ts            # 引擎入口 executeWorkflow()
 │   │   └── nodes/              # Input/Prompt/Provider/Parse/Validate/DTO/Output
@@ -175,19 +182,186 @@ ContentFlow-Lite/
 │   │   ├── reset-super-admin.ts
 │   │   ├── promote-admin.ts
 │   │   └── migrate-role-enum.ts
-│   └── utils/                  # 工具（logger, validate 等）
+│   └── utils/                  # 工具
+│       ├── logger.ts           # Winston 日志封装
+│       ├── response.ts         # 统一响应信封（success/created/fail）
+│       ├── route-helpers.ts    # 分页/批量/错误辅助
+│       └── validate.ts         # 输入校验
 │
-├── docs/                       # 项目文档（PRD/SPEC/types/PHASE_GATE）
+├── docs/                       # 项目文档（13 个文件）
+│   ├── PRD.md                  # 产品需求文档（what）
+│   ├── SPEC.md                 # 技术架构规范（how）
+│   ├── types.md                # 核心类型定义（TS 接口规范）
+│   ├── ADR.md                  # 架构决策记录（为什么这样设计）
+│   ├── API_SPEC.md             # API 接口文档（已实现 + 待开发清单）
+│   ├── API_TEST.md             # Apifox 测试用例（24 个接口，含详情端点）
+│   ├── PHASE_GATE.md           # Phase Gate 推进机制（流程规范）
+│   ├── PHASE3_DESIGN.md        # Phase 3 详细设计（RBAC/TypeORM/AdminJS）
+│   ├── PROGRESS.md             # 实现进度追踪（模块状态 + 会话记录）
+│   ├── ARCHITECTURE_REVIEW.md  # 后端架构验收报告（目录/分层/安全审计）
+│   ├── ARCHITECTURE_DRILL.md   # 架构规则落地演练（请求链路验证）
+│   └── IMPLEMENTATION_READINESS.md  # 实施真元文档（20 项准备度评估）
 ├── scripts/                    # Phase Gate 脚本 + Git hooks
 ├── .rules/                     # AI 开发规范（9 个规则文件）
 ├── pnpm-workspace.yaml         # pnpm monorepo 配置
 ├── package.json                # 根 workspace 脚本
 ├── .env.example                # 环境变量模板
-├── PROGRESS.md                 # 实现进度追踪
+├── .phase                      # 当前 Phase 编号
+├── CLAUDE.md                   # Claude 任务路由
 └── CLAUDE.md                   # Claude 任务路由
 ```
 
+
+### 文档导航
+
+| 场景 | 应该看 |
+|------|--------|
+| 新人了解项目 | `README.md` → `PRD.md` → `SPEC.md` |
+| 理解为什么这样设计 | `ADR.md` |
+| 查 API 使用方法 | `API_SPEC.md` |
+| 编写 Apifox 测试 | `API_TEST.md` |
+| 了解开发进度 | `PROGRESS.md` |
+| 了解推进流程 | `PHASE_GATE.md` |
+| 了解 Phase 3 计划 | `PHASE3_DESIGN.md` |
+| 审计后端架构 | `ARCHITECTURE_REVIEW.md` |
+| 验证架构规则 | `ARCHITECTURE_DRILL.md` |
+| 判断能否开始写业务代码 | `IMPLEMENTATION_READINESS.md` |
+| 查 TypeScript 类型 | `types.md` |
+
 ---
+
+---
+
+---
+
+## 启动验收
+
+> 验收日期：2026-07-05 · 环境：macOS arm64 + Node.js v24.18.0 + pnpm v11.9.0
+
+### 依赖安装
+
+```bash
+pnpm install
+```
+
+| 项目 | 值 |
+|------|-----|
+| 包管理器 | pnpm v11.9.0 |
+| Workspace | 4 个子包（shared / client / server / root） |
+| 后端运行时 | tsx watch（热重载） |
+
+### 启动命令与监听端口
+
+```bash
+# 开发模式（热重载）
+cd server && pnpm dev
+
+# 生产模式
+cd server && pnpm build && pnpm start
+```
+
+| 配置项 | 值 | 来源 |
+|--------|-----|------|
+| 监听端口 | `3001` | `PORT` 环境变量，默认 3001 |
+| 进程管理 | tsx watch（开发）/ node（生产） | `server/package.json` scripts |
+| 环境变量文件 | `server/.env`（优先）→ 根 `.env`（回退） | `server/env.ts:20` |
+
+### 健康检查
+
+**命令：**
+
+```bash
+curl http://localhost:3001/health
+```
+
+**结果：**
+
+```json
+{"status":"ok","db":"connected","timestamp":"2026-07-05T07:24:47.057Z"}
+```
+
+| 字段 | 含义 | 验证方式 |
+|------|------|---------|
+| `status` | 服务状态 | `"ok"` = 正常运行 |
+| `db` | 数据库连接 | `"connected"` = 连接池可用；`"disconnected"` = 不可用 |
+| `timestamp` | 检查时刻 | ISO 8601 UTC |
+
+### 数据库连接
+
+| 维度 | 详情 |
+|------|------|
+| 数据库类型 | TiDB Cloud（MySQL 兼容） |
+| 连接地址 | `gateway01.ap-northeast-1.prod.aws.tidbcloud.com:4000`（SSL） |
+| 驱动 | `mysql2/promise` 连接池 |
+| 初始化文件 | `server/db/client.ts`（`initPool` → `getPool`） |
+| 表结构 | `server/db/schema.ts`（8 张表，`CREATE TABLE IF NOT EXISTS`） |
+| 表清单 | `users`, `contents`, `prompt_templates`, `prompt_versions`, `generation_records`, `user_settings`, `publish_records`, `app_logs` |
+
+**启动时数据库日志：**
+
+```
+数据库连接池已初始化
+数据库表已就绪 (8 张): users, contents, prompt_templates, prompt_versions,
+  generation_records, user_settings, publish_records, app_logs
+超级管理员已存在，跳过初始化
+```
+
+### 配置读取路径
+
+```
+server/.env                    ← 环境变量（dotenv 加载）
+        │
+        ▼
+server/config.ts               ← 双层合并（config.json > .env）
+        │
+        ├── config.port        ← process.env.PORT || 3001
+        ├── config.db          ← process.env.DB_* || config.json.db
+        ├── config.jwt         ← process.env.JWT_SECRET
+        ├── config.admin       ← process.env.ADMIN_*/SUPER_ADMIN_*
+        └── config.log         ← process.env.LOG_LEVEL / LOG_TO_DB
+```
+
+| 配置项 | 读取位置 | 优先级 |
+|--------|---------|--------|
+| 数据库连接 | `config.ts:50-57` | `config.json` > `.env` |
+| JWT 密钥 | `config.ts:59-61` | `.env` > 硬编码默认值 |
+| 日志级别 | `config.ts:87` | `.env` > `info` |
+| CORS 来源 | `config.ts:91-93` | `.env` > `*` |
+| 服务端口 | `config.ts:48` | `.env` > `3001` |
+
+### 日志机制
+
+| 维度 | 详情 |
+|------|------|
+| 日志库 | Winston v3.17.0 |
+| 级别 | TRACE < DEBUG < INFO < WARN < ERROR（对标 Spring Boot） |
+| Console Transport | ✅ 始终启用，彩色输出，格式 `YYYY-MM-DD HH:mm:ss.SSS [module] message` |
+| MySQL Transport | 可选（`LOG_TO_DB=true`），写入 `app_logs` 表 |
+| 封装入口 | `createLogger(module)` → 各模块获取命名 Logger |
+| 禁止 | 直接 `console.log` → 必须通过 `Logger` 模块 |
+
+**请求日志示例（Console）：**
+
+```
+2026-07-05 15:24:45.934 info [server] 🚀 ContentFlow Lite API 服务已启动 {"port":3001}
+2026-07-05 15:24:45.934 info [server] 📍 健康检查: http://localhost:3001/health
+```
+
+**错误响应示例（API 层）：**
+
+```json
+{"code":"INPUT_ERROR","message":"密码至少 6 个字符","error":{"data":[{"field":"password","message":"密码至少 6 个字符"}]}}
+```
+
+### 超级管理员
+
+| 维度 | 详情 |
+|------|------|
+| 创建时机 | 首次启动，`users` 表无 `super_admin` 角色时自动创建 |
+| 密码来源 | 优先 `SUPER_ADMIN_PASSWORD` 环境变量；未设置则交互式输入 |
+| 用户名/邮箱 | `SUPER_ADMIN_USERNAME` / `SUPER_ADMIN_EMAIL` 环境变量（默认 `superadmin`） |
+| 角色 | `super_admin`（ENUM，系统唯一） |
+| 密码加密 | bcrypt hash，cost = 12 |
 
 ## Workflow 流程
 
