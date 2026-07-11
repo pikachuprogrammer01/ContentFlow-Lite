@@ -6,14 +6,16 @@
  */
 
 import express, { type Express } from 'express';
-import cors from 'cors';
 import helmet from 'helmet';
 import { testConnection } from './db/client.js';
+import { corsMiddleware } from './middleware/cors.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createGenerateRouter } from './routes/generate.js';
 import { createContentRouter } from './routes/content.js';
 import { createPromptRouter } from './routes/prompt.js';
 import { createAdminRouter } from './routes/admin.js';
+import { globalErrorHandler } from './middleware/error-handler.js';
+import { NotFoundError } from './utils/errors.js';
 
 // 自动注册所有 Provider（side-effect import）
 import './providers/mock-provider.js';
@@ -42,13 +44,7 @@ export function createApp(): Express {
   );
 
   // CORS: 允许前端跨域请求
-  app.use(
-    cors({
-      origin: process.env.CORS_ORIGIN || '*',
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
-    }),
-  );
+  app.use(corsMiddleware);
 
   // JSON 请求体解析
   app.use(express.json({ limit: '1mb' }));
@@ -70,6 +66,14 @@ export function createApp(): Express {
   app.use('/api/content', createContentRouter());
   app.use('/api/prompt', createPromptRouter());
   app.use('/api/admin', createAdminRouter());
+
+  // ── 404 兜底（必须放在所有路由之后、全局异常处理之前） ───
+  app.use((_req, _res, next) => {
+    next(new NotFoundError('接口不存在'));
+  });
+
+  // ── 全局异常处理（必须放在所有路由之后） ─────────────────
+  app.use(globalErrorHandler);
 
   return app;
 }

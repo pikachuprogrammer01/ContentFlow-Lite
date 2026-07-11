@@ -4,9 +4,10 @@
  * POST /api/auth/register  — 注册
  * POST /api/auth/login     — 登录
  * GET  /api/auth/me        — 获取当前用户（需认证）
+ * PUT  /api/auth/me        — 更新个人信息（需认证）
  *
  * 单 Token 模式：accessToken 有效期 24 小时，无刷新机制。
- * 适用场景：单次会话型应用，用户登出/Token 过期后重新登录即可。
+ * 错误通过 throw AppError 抛出，由全局 error-handler 统一处理。
  */
 
 import { Router, type Request, type Response } from 'express';
@@ -16,12 +17,22 @@ import { randomUUID } from 'node:crypto';
 import { config } from '../config.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { loginLimiter } from '../middleware/rate-limit.js';
+import { asyncHandler } from '../middleware/error-handler.js';
 import * as userRepo from '../db/repositories/user-repo.js';
 import { createLogger } from '../utils/logger.js';
-import { validateRegisterInput, validateLoginInput, validateProfileInput } from '../utils/validate.js';
+import {
+  validateRegisterInput,
+  validateLoginInput,
+  validateProfileInput,
+} from '../utils/validate.js';
+import {
+  ValidationError,
+  ConflictError,
+  AuthError,
+  NotFoundError,
+} from '../utils/errors.js';
 
 const log = createLogger('routes/auth');
-
 const BCRYPT_COST = 12;
 
 /** 生成 access token（24 小时有效期） */
@@ -33,14 +44,12 @@ export function createAuthRouter(): Router {
   const router = Router();
 
   // ── POST /api/auth/register ────────────────────────────
-  router.post('/register', async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/register',
+    asyncHandler(async (req: Request, res: Response) => {
       const result = validateRegisterInput(req.body);
       if (!result.valid) {
-        res.status(400).json({
-          error: { code: 'INPUT_ERROR', message: result.errors[0].message, errors: result.errors },
-        });
-        return;
+        throw new ValidationError(result.errors[0].message, result.errors);
       }
 
       const { username, password, email, adminKey } = result.values;
@@ -48,27 +57,18 @@ export function createAuthRouter(): Router {
       // 检查用户名/邮箱唯一性
       const existingUser = await userRepo.findByUsername(username);
       if (existingUser) {
-        res.status(409).json({
-          error: { code: 'CONFLICT', message: '用户名已被注册' },
-        });
-        return;
+        throw new ConflictError('用户名已被注册');
       }
 
       const existingEmail = await userRepo.findByEmail(email);
       if (existingEmail) {
-        res.status(409).json({
-          error: { code: 'CONFLICT', message: '邮箱已被注册' },
-        });
-        return;
+        throw new ConflictError('邮箱已被注册');
       }
 
       // 哈希密码
       const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
 
-      // 确定角色：
-      // 1. 提供管理员密钥 → admin
-      // 2. 数据库中没有用户（首次安装） → admin
-      // 3. 其他 → 普通用户
+      // 确定角色：adminKey 正确 → admin，首用户 → admin，其余 → user
       // 注：super_admin 只能由系统初始化创建，不可通过注册获得
       const setupKey = config.admin.setupKey;
       const isAdmin = !!(adminKey && setupKey && adminKey === setupKey);
@@ -83,52 +83,37 @@ export function createAuthRouter(): Router {
       // 生成 Token
       const accessToken = generateToken(userId, role);
 
-      log.info('用户注册成功', { username });
+      log.info('用户注册成功', { username, role });
 
       res.status(201).json({
         user: { id: userId, username, email, role },
         accessToken,
       });
-    } catch (err) {
-      log.error('注册失败', { error: String(err) });
-      res.status(500).json({
-        error: { code: 'UNKNOWN_ERROR', message: '服务器内部错误' },
-      });
-    }
-  });
+    }),
+  );
 
   // ── POST /api/auth/login ───────────────────────────────
-  router.post('/login', loginLimiter, async (req: Request, res: Response) => {
-    try {
+  router.post(
+    '/login',
+    loginLimiter,
+    asyncHandler(async (req: Request, res: Response) => {
       const result = validateLoginInput(req.body);
       if (!result.valid) {
-        res.status(400).json({
-          error: { code: 'INPUT_ERROR', message: result.errors[0].message, errors: result.errors },
-        });
-        return;
+        throw new ValidationError(result.errors[0].message, result.errors);
       }
 
       const { username, password } = result.values;
 
-      // 查找用户
       const user = await userRepo.findByUsername(username);
       if (!user) {
-        res.status(401).json({
-          error: { code: 'UNAUTHORIZED', message: '该用户不存在！' },
-        });
-        return;
+        throw new AuthError('该用户不存在！');
       }
 
-      // 验证密码
       const valid = await bcrypt.compare(password, user.password_hash);
       if (!valid) {
-        res.status(401).json({
-          error: { code: 'UNAUTHORIZED', message: '用户名或密码错误' },
-        });
-        return;
+        throw new AuthError('用户名或密码错误');
       }
 
-      // 生成 Token
       const accessToken = generateToken(user.id, user.role);
 
       log.info('用户登录成功', { userId: user.id });
@@ -142,25 +127,19 @@ export function createAuthRouter(): Router {
         },
         accessToken,
       });
-    } catch (err) {
-      log.error('登录失败', { error: String(err) });
-      res.status(500).json({
-        error: { code: 'UNKNOWN_ERROR', message: '服务器内部错误' },
-      });
-    }
-  });
+    }),
+  );
 
   // ── GET /api/auth/me ───────────────────────────────────
-  router.get('/me', authMiddleware, async (req: Request, res: Response) => {
-    try {
+  router.get(
+    '/me',
+    authMiddleware,
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = req.user!.userId;
       const user = await userRepo.findById(userId);
 
       if (!user) {
-        res.status(404).json({
-          error: { code: 'NOT_FOUND', message: '用户不存在' },
-        });
-        return;
+        throw new NotFoundError('用户不存在');
       }
 
       res.json({
@@ -172,24 +151,18 @@ export function createAuthRouter(): Router {
           createdAt: user.created_at,
         },
       });
-    } catch (err) {
-      log.error('获取用户信息失败', { error: String(err) });
-      res.status(500).json({
-        error: { code: 'UNKNOWN_ERROR', message: '服务器内部错误' },
-      });
-    }
-  });
+    }),
+  );
 
   // ── PUT /api/auth/me ───────────────────────────────────
-  router.put('/me', authMiddleware, async (req: Request, res: Response) => {
-    try {
+  router.put(
+    '/me',
+    authMiddleware,
+    asyncHandler(async (req: Request, res: Response) => {
       const userId = req.user!.userId;
       const result = validateProfileInput(req.body);
       if (!result.valid) {
-        res.status(400).json({
-          error: { code: 'INPUT_ERROR', message: result.errors[0].message, errors: result.errors },
-        });
-        return;
+        throw new ValidationError(result.errors[0].message, result.errors);
       }
 
       const fields: { username?: string; email?: string } = {};
@@ -208,13 +181,8 @@ export function createAuthRouter(): Router {
           createdAt: user!.created_at,
         },
       });
-    } catch (err) {
-      log.error('更新用户信息失败', { error: String(err) });
-      res.status(500).json({
-        error: { code: 'UNKNOWN_ERROR', message: '更新用户信息失败' },
-      });
-    }
-  });
+    }),
+  );
 
   return router;
 }

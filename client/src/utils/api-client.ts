@@ -47,20 +47,19 @@ axiosInstance.interceptors.request.use((config) => {
 // 响应拦截：统一错误处理 + 401 跳转
 axiosInstance.interceptors.response.use(
   (res) => {
-    // 兼容两种后端响应格式：
-    // - { data: {...} }   → 解包 data 层
-    // - { user: ..., accessToken: ... } → 直接返回
+    // 新信封格式：{ code: 200, data: {...}, message: "..." }
+    // 解包 data 层；特殊格式（无 data 字段，如认证模块）直接透传
     return res.data?.data ?? res.data;
   },
   (err) => {
     if (err.response?.status === 401) {
       redirectToLogin();
     }
-    const message =
-      err.response?.data?.error?.message ||
-      err.message ||
-      `HTTP ${err.response?.status || 'error'}`;
-    const code = err.response?.data?.error?.code || 'UNKNOWN_ERROR';
+    // 新信封格式：{ code: "ERROR_CODE", message: "..." }
+    // 兼容旧格式：{ error: { code, message } }
+    const body = err.response?.data || {};
+    const code = body.code || body.error?.code || 'UNKNOWN_ERROR';
+    const message = body.message || body.error?.message || err.message || `HTTP ${err.response?.status || 'error'}`;
     return Promise.reject(new ApiError(code, message, err.response?.status || 0));
   },
 );

@@ -42,8 +42,8 @@ export const useContentStore = defineStore('content', () => {
     error.value = null;
 
     try {
-      const res = await api.post<{ content: Content }>('/api/generate', params);
-      currentContent.value = res.content;
+      const res = await api.post<Content>('/api/generate', params);
+      currentContent.value = res;
       return true;
     } catch (e: unknown) {
       const err = e as { code?: string; message?: string; node?: string };

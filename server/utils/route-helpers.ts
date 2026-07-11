@@ -4,7 +4,7 @@
  * 减少 admin / prompt 路由中的重复代码（分页解析、响应包装、批量校验、错误处理）。
  */
 
-import type { Response } from 'express';
+import { ValidationError } from './errors.js';
 
 /** 模块 Logger 接口（与 createLogger 返回值对齐） */
 export interface ModuleLogger {
@@ -61,32 +61,16 @@ export function wrapPagination<T>(items: T[], total: number, meta: PaginationMet
 
 export const MAX_BATCH_IDS = 100;
 
-/** 校验 ids 数组，不符合时直接响应 400 并返回 false */
-export function validateBatchIds(res: Response, body: unknown): string[] | null {
+/**
+ * 校验 ids 数组，不符合时抛出 ValidationError（由全局 error handler 统一处理）。
+ *
+ * @throws ValidationError
+ */
+export function validateBatchIds(body: unknown): string[] {
   const { ids } = body as Record<string, unknown>;
   if (!Array.isArray(ids) || ids.length === 0 || ids.length > MAX_BATCH_IDS) {
-    res.status(400).json({
-      error: {
-        code: 'INPUT_ERROR',
-        message: `ids 必须是非空数组，最多 ${MAX_BATCH_IDS} 条`,
-      },
-    });
-    return null;
+    throw new ValidationError(`ids 必须是非空数组，最多 ${MAX_BATCH_IDS} 条`);
   }
   return ids as string[];
 }
 
-// ══════════════════════════════════════════════════════════════
-// 错误处理
-// ══════════════════════════════════════════════════════════════
-
-/** 标准化路由错误处理：记录日志 + 500 响应 */
-export function handleError(res: Response, log: ModuleLogger, operation: string, err: unknown): void {
-  log.error(`${operation} 失败`, { error: String(err) });
-  res.status(500).json({
-    error: {
-      code: 'UNKNOWN_ERROR',
-      message: `${operation}失败`,
-    },
-  });
-}

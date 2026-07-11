@@ -4,10 +4,14 @@
  * 登录：5 次/分钟/IP
  * 生成：10 次/分钟/用户
  * 重置密码：3 次/分钟/管理员用户
+ *
+ * 限流响应使用 fail() 统一信封，与全局 error handler 格式一致。
  */
 
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import type { Request, Response } from 'express';
+import { fail } from '../utils/response.js';
+import { ErrorCode } from '../utils/errors.js';
 
 /**
  * 登录限流：5 次/分钟/IP。
@@ -18,11 +22,8 @@ export const loginLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    error: {
-      code: 'RATE_LIMITED',
-      message: '登录过于频繁，请 1 分钟后再试',
-    },
+  handler: (_req: Request, res: Response) => {
+    res.status(429).json(fail(ErrorCode.RATE_LIMITED, '登录过于频繁，请 1 分钟后再试'));
   },
 });
 
@@ -40,11 +41,8 @@ export const generateLimiter = rateLimit({
   keyGenerator: (req: Request, _res: Response): string => {
     return req.user?.userId || ipKeyGenerator(req.ip ?? '', 56);
   },
-  message: {
-    error: {
-      code: 'RATE_LIMITED',
-      message: '生成请求过于频繁，请 1 分钟后再试',
-    },
+  handler: (_req: Request, res: Response) => {
+    res.status(429).json(fail(ErrorCode.RATE_LIMITED, '生成请求过于频繁，请 1 分钟后再试'));
   },
 });
 
@@ -62,10 +60,7 @@ export const resetPasswordLimiter = rateLimit({
   keyGenerator: (req: Request, _res: Response): string => {
     return req.user?.userId || ipKeyGenerator(req.ip ?? '', 56);
   },
-  message: {
-    error: {
-      code: 'RATE_LIMITED',
-      message: '重置密码操作过于频繁，请 1 分钟后再试',
-    },
+  handler: (_req: Request, res: Response) => {
+    res.status(429).json(fail(ErrorCode.RATE_LIMITED, '重置密码操作过于频繁，请 1 分钟后再试'));
   },
 });
