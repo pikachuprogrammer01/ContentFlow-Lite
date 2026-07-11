@@ -5,6 +5,9 @@ alwaysApply: true
 
 # Coding Rules
 
+> 版本：2026-07-05 · 对标 `docs/SPEC.md`
+
+
 ## 一、核心目标
 
 本规范用于统一 ContentFlow Lite 的代码风格与工程实现方式。

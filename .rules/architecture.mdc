@@ -5,6 +5,9 @@ alwaysApply: true
 
 # Architecture Rules
 
+> 版本：2026-07-05 · 对标 `docs/SPEC.md`
+
+
 ## 一、核心原则
 
 ContentFlow Lite 采用统一的数据模型和工作流架构。
@@ -65,22 +68,25 @@ Prompt Version 创建后不可修改。
 
 # 二、架构约束
 
-项目采用分层架构。
+项目采用分层架构（六层单向依赖）。
 
 ```text
-Presentation
+Client (Vue 3 + Naive UI)        ← 渲染 DTO，用户交互
       │
       ▼
-Workflow
+API Layer (Express)               ← 认证、限流、参数校验、响应格式化
       │
       ▼
-Services
+Workflow Engine (7-node Pipeline) ← 流程编排、重试控制
       │
       ▼
-Domain
+Service Layer                     ← PromptBuilder、AIProvider、Parser、Validator
       │
       ▼
-Infrastructure
+Domain Layer                      ← Content DTO、Metadata、PromptVersion 类型定义
+      │
+      ▼
+Infrastructure (DB / Logger / Exporter)
 ```
 
 依赖关系必须保持单向。
@@ -259,27 +265,19 @@ metadata 至少包含：
 Workflow 生命周期固定如下：
 
 ```text
-Input
-
-↓
-
-Prompt Builder
-
-↓
-
-AI Provider
-
-↓
-
-Parser
-
-↓
-
-Content DTO
-
-↓
-
-Editor / Exporter
+Input Node
+    ↓
+Prompt Node（Template → PromptBuilder → FinalPrompt）
+    ↓
+Provider Node（调用 AI，最多重试 3 次）
+    ↓
+Parse Node（JSON 解析 + 去除 markdown 围栏）
+    ↓
+Validate Node（OutputSchema 校验，失败则注入错误 → 重试 Provider）
+    ↓
+DTO Node（分配 ID，注入 Metadata）
+    ↓
+Output Node（终检 + 分发）
 ```
 
 不得跳过任何阶段。

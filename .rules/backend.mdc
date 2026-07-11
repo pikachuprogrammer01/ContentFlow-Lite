@@ -5,24 +5,26 @@ alwaysApply: true
 
 # Backend Rules — 后端架构与数据库规范
 
+> 版本：2026-07-05 · 对标 SPEC.md · [Phase 3] 标记项完整设计见 `docs/PHASE3_DESIGN.md`
+
 ## 一、技术选型
 
 | 层 | 技术 | 说明 |
 |---|---|---|
 | API 框架 | **Express** | 生态最大，AdminJS/认证/安全中间件开箱即用 |
 | 数据库 | **MySQL 兼容数据库** | 不绑定平台：本地 MySQL / TiDB / MariaDB / PlanetScale / RDS 等任意 MySQL 兼容库 |
-| 数据库驱动 | **mysql2** | Node.js MySQL 客户端 |
-| ORM | **TypeORM**（必须） | AdminJS 依赖 TypeORM 接入，repository 层可直接写 SQL |
-| 数据库管理 | **AdminJS** + `@adminjs/express` + `@adminjs/typeorm` | 自动生成 CRUD 界面 |
+| 数据库驱动 | **mysql2**（Phase 2）→ **TypeORM**（Phase 3） | Node.js MySQL 客户端 |
+| ORM | **TypeORM** [Phase 3] | AdminJS 依赖 TypeORM 接入，repository 层可直接写 SQL |
+| 数据库管理 | **AdminJS** + `@adminjs/express` + `@adminjs/typeorm` [Phase 3] | 自动生成 CRUD 界面 |
 | 认证 | **JWT**（`jsonwebtoken`） | 单 Token 模式，24h 有效期，无刷新机制 |
 | 密码哈希 | **bcryptjs** | cost=12 |
 | 数据加密 | **AES-256-GCM**（Node.js crypto） | API Key / DB 密码等敏感字段落库前加密，读取时解密 |
 | 安全头 | **helmet** | HTTP 安全头 |
 | 限流 | **express-rate-limit** | 登录 5次/分钟/IP + `/api/generate` 10次/分钟/用户 |
-| 缓存 | **Redis**（可选） | API Key 热缓存，不配则直接查 DB |
+| 缓存 | **Redis**（可选）[Phase 3] | API Key 热缓存，不配则直接查 DB |
 | 部署 | **Vercel**（后端，默认） | Node.js 服务，与前端分离部署 |
 | 组件库 | **Naive UI** | Vue 3 原生、TypeScript-first、tree-shaking 最优、中文文档完善 |
-| API 文档 | **swagger-jsdoc + @scalar/express-api-reference** | JSDoc 注释自动生成 OpenAPI spec，Scalar 渲染现代 API 文档页 |
+| API 文档 | **swagger-jsdoc + @scalar/express-api-reference** [Phase 3] | JSDoc 注释自动生成 OpenAPI spec，Scalar 渲染现代 API 文档页 |
 
 ### 选型理由
 
@@ -58,12 +60,16 @@ ContentFlow Lite
 │   │   ├── content.ts            # /api/content/*
 │   │   ├── prompt.ts             # /api/prompt/*
 │   │   ├── generate.ts           # /api/generate
-│   │   └── admin-config.ts       # /api/admin/config/*
+│   │   └── admin/
+│   │       ├── index.ts            # /api/admin 路由挂载
+│   │       ├── prompts.ts          # Prompt 模板/版本管理
+│   │       ├── generations.ts      # 生成记录管理
+│   │       └── contents.ts         # 内容管理
 │   ├── middleware/
-│   │   ├── auth.ts               # JWT 验证中间件
-│   │   ├── admin-guard.ts        # 仅允许 role=admin
-│   │   ├── rate-limit.ts         # 限流
-│   │   └── cors.ts
+│   │   ├── auth.ts               # JWT 验证中间件 + adminGuard / superAdminGuard
+│   │   ├── rate-limit.ts         # 限流（loginLimiter / generateLimiter / resetPasswordLimiter）
+│   │   ├── cors.ts               # CORS 配置
+│   │   └── error-handler.ts      # Global Error Handler [Phase 3]
 │   ├── workflow/                 # Workflow 引擎（后端执行 7 节点 Pipeline）
 │   │   ├── index.ts              # Workflow 入口
 │   │   └── nodes/
@@ -88,8 +94,11 @@ ContentFlow Lite
 │   │       ├── prompt-repo.ts
 │   │       ├── generation-repo.ts
 │   │       └── user-repo.ts
-│   ├── admin/
-│   │   └── index.ts              # AdminJS 配置（仅 admin 可访问）
+│   ├── utils/
+│   │   ├── logger.ts             # Winston 封装（createLogger）
+│   │   ├── validate.ts           # 输入校验（validateRegisterInput 等）
+│   │   ├── response.ts           # 统一响应信封（success / created / fail）
+│   │   └── route-helpers.ts      # 路由公共工具（parsePagination / wrapPagination）
 │   └── config.ts                 # 配置加载（.env + config.json 合并）
 │
 ├── .env                          # 环境变量（DB 连接 / JWT Secret）
@@ -108,7 +117,7 @@ CREATE TABLE users (
   username      VARCHAR(100)  NOT NULL UNIQUE COMMENT '用户名',
   email         VARCHAR(200)  NOT NULL UNIQUE COMMENT '邮箱',
   password_hash VARCHAR(255)  NOT NULL COMMENT 'bcrypt 哈希',
-  role          ENUM('admin','user') NOT NULL DEFAULT 'user' COMMENT '角色权限',
+  role          ENUM('super_admin','admin','user') NOT NULL DEFAULT 'user' COMMENT '角色权限（super_admin 唯一，admin 管理员，user 普通用户）',
   created_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) COMMENT='用户表';
@@ -677,17 +686,22 @@ repository 不得包含业务逻辑。
 **原因**：第三方库升级/替换只改封装层；统一错误处理；集中管理配置。
 **命名**：封装层放在 `server/utils/` 或 `server/db/`，对外暴露语义化函数签名，隐藏底层实现。
 
-### 9.3 错误处理
+### 9.3 错误处理（统一响应信封）
+
+所有 API 响应使用统一信封格式，由 `server/utils/response.ts` 的 `success()` / `created()` / `fail()` 工厂函数产出：
 
 ```ts
-interface APIError {
-  error: {
-    code: string;    // 与前端 WorkflowError.code 对齐
-    message: string;
-    detail?: unknown;
-  };
-}
+// 成功
+{ code: 200, data: <具体数据>, message: "<中文描述>" }
+// 创建成功
+{ code: 201, data: <创建的资源>, message: "创建成功" }
+
+// 错误
+{ code: "<ERROR_CODE>", message: "<中文描述>", error?: { data: [{ field, message }] } }
 ```
+
+> `error.data` 仅在 `INPUT_ERROR` 时存在，列出每个字段的校验错误。
+> 完整规范见 `docs/SPEC.md` §统一响应格式 和 `docs/API_SPEC.md` §通用响应规范。
 
 | HTTP 状态码 | 场景 |
 |---|---|

@@ -5,6 +5,9 @@ alwaysApply: true
 
 # Workflow Rules
 
+> 版本：2026-07-05 · 对标 `docs/SPEC.md`
+
+
 ## 一、核心定位
 
 Workflow 是 ContentFlow Lite 的唯一业务编排中心。

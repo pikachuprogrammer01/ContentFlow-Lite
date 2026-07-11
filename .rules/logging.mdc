@@ -5,6 +5,9 @@ alwaysApply: true
 
 # Logging Rules — 日志模块规范
 
+> 版本：2026-07-05 · 对标 `docs/SPEC.md`
+
+
 ## 一、核心原则
 
 整个系统必须通过统一的 Logger 模块输出日志，**禁止在任何位置直接使用 `console.log()` / `console.error()`**。
@@ -126,7 +129,7 @@ export function createMySQLTransport(pool: Pool): Transport {
 
 ---
 
-### 3.4 数据库存什么
+### 3.5 数据库存什么
 
 | 字段 | 来源 |
 |---|---|
@@ -140,7 +143,7 @@ export function createMySQLTransport(pool: Pool): Transport {
 
 生产环境 INFO 及以上写入 DB，DEBUG/TRACE 仅控制台。
 
-### 3.5 环境变量
+### 3.6 环境变量
 
 ```
 LOG_LEVEL=info          # TRACE|DEBUG|INFO|WARN|ERROR
