@@ -5,7 +5,7 @@
  * 支持修改用户名和邮箱，通过 PUT /api/auth/me 提交。
  */
 
-import { ref } from 'vue';
+import { computed, ref,onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   NCard,
@@ -18,15 +18,25 @@ import {
   NInput,
   useMessage,
 } from 'naive-ui';
-import { useAuthStore } from '@/stores/auth';
 import { api } from '@/utils/api-client';
 import type { UserInfo } from '@/types';
 import DefaultLayout from '@/layouts/DefaultLayout.vue';
+import { useAuthStore } from '@/stores/auth';
 
 const router = useRouter();
-const auth = useAuthStore();
 const message = useMessage();
+const auth = useAuthStore();
 
+onMounted(async () => {
+  await auth.fetchUser().catch((err) => {
+    message.error(err?.message || '获取用户信息失败');
+  });
+})
+
+const createdAt = computed(() => {
+  if (!auth.user?.createdAt) return '-';
+  return new Date(auth.user?.createdAt).toLocaleString();
+})
 // ── 编辑状态 ──────────────────────────────────────────
 
 const editing = ref(false);
@@ -144,7 +154,8 @@ function handleLogout(): void {
               {{ roleLabel(auth.user?.role || 'user') }}
             </NDescriptionsItem>
             <NDescriptionsItem label="注册时间">
-              {{ auth.user?.createdAt ? new Date(auth.user.createdAt).toLocaleString() : '—' }}
+              {{ createdAt }}
+              <!-- {{ auth }} -->
             </NDescriptionsItem>
             <NDescriptionsItem label="用户 ID">
               <code>{{ auth.user?.id }}</code>

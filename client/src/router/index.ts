@@ -60,15 +60,6 @@ router.beforeEach(async (to, _from, next) => {
 
   const auth = useAuthStore();
 
-  // 已有 token 但未加载用户信息 → 先拉取
-  if (auth.token && !auth.user) {
-    const ok = await auth.fetchUser();
-    if (ok) {
-      next();
-      return;
-    }
-  }
-
   if (auth.isAuthenticated) {
     // 管理员页面：仅 admin 角色可访问，否则跳首页
     if (to.meta.admin && auth.user?.role !== 'admin' && auth.user?.role !== 'super_admin') {
