@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+*/dist
 *.local
 
 # Editor directories and files
@@ -25,3 +26,8 @@ dist-ssr
 
 # pnpm
 .pnpm-store/
+
+# Environment
+.env
+
+reasonix.toml

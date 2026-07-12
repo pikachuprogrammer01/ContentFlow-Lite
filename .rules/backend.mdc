@@ -5,24 +5,26 @@ alwaysApply: true
 
 # Backend Rules — 后端架构与数据库规范
 
+> 版本：2026-07-05 · 对标 SPEC.md · [Phase 3] 标记项完整设计见 `docs/PHASE3_DESIGN.md`
+
 ## 一、技术选型
 
 | 层 | 技术 | 说明 |
 |---|---|---|
 | API 框架 | **Express** | 生态最大，AdminJS/认证/安全中间件开箱即用 |
 | 数据库 | **MySQL 兼容数据库** | 不绑定平台：本地 MySQL / TiDB / MariaDB / PlanetScale / RDS 等任意 MySQL 兼容库 |
-| 数据库驱动 | **mysql2** | Node.js MySQL 客户端 |
-| ORM | **TypeORM**（必须） | AdminJS 依赖 TypeORM 接入，repository 层可直接写 SQL |
-| 数据库管理 | **AdminJS** + `@adminjs/express` + `@adminjs/typeorm` | 自动生成 CRUD 界面 |
-| 认证 | **JWT**（`jsonwebtoken`） | access token 15min + refresh token 7d |
+| 数据库驱动 | **mysql2**（Phase 2）→ **TypeORM**（Phase 3） | Node.js MySQL 客户端 |
+| ORM | **TypeORM** [Phase 3] | AdminJS 依赖 TypeORM 接入，repository 层可直接写 SQL |
+| 数据库管理 | **AdminJS** + `@adminjs/express` + `@adminjs/typeorm` [Phase 3] | 自动生成 CRUD 界面 |
+| 认证 | **JWT**（`jsonwebtoken`） | 单 Token 模式，24h 有效期，无刷新机制 |
 | 密码哈希 | **bcryptjs** | cost=12 |
 | 数据加密 | **AES-256-GCM**（Node.js crypto） | API Key / DB 密码等敏感字段落库前加密，读取时解密 |
 | 安全头 | **helmet** | HTTP 安全头 |
 | 限流 | **express-rate-limit** | 登录 5次/分钟/IP + `/api/generate` 10次/分钟/用户 |
-| 缓存 | **Redis**（可选） | API Key 热缓存，不配则直接查 DB |
+| 缓存 | **Redis**（可选）[Phase 3] | API Key 热缓存，不配则直接查 DB |
 | 部署 | **Vercel**（后端，默认） | Node.js 服务，与前端分离部署 |
 | 组件库 | **Naive UI** | Vue 3 原生、TypeScript-first、tree-shaking 最优、中文文档完善 |
-| API 文档 | **swagger-jsdoc + @scalar/express-api-reference** | JSDoc 注释自动生成 OpenAPI spec，Scalar 渲染现代 API 文档页 |
+| API 文档 | **swagger-jsdoc + @scalar/express-api-reference** [Phase 3] | JSDoc 注释自动生成 OpenAPI spec，Scalar 渲染现代 API 文档页 |
 
 ### 选型理由
 
@@ -54,16 +56,20 @@ ContentFlow Lite
 │   ├── index.ts                  # 入口：启动 Express 服务
 │   ├── app.ts                    # Express app 配置（中间件/路由挂载）
 │   ├── routes/
-│   │   ├── auth.ts               # /api/auth/login | register | refresh | me | reset-password
+│   │   ├── auth.ts               # /api/auth/login | register | me
 │   │   ├── content.ts            # /api/content/*
 │   │   ├── prompt.ts             # /api/prompt/*
 │   │   ├── generate.ts           # /api/generate
-│   │   └── admin-config.ts       # /api/admin/config/*
+│   │   └── admin/
+│   │       ├── index.ts            # /api/admin 路由挂载
+│   │       ├── prompts.ts          # Prompt 模板/版本管理
+│   │       ├── generations.ts      # 生成记录管理
+│   │       └── contents.ts         # 内容管理
 │   ├── middleware/
-│   │   ├── auth.ts               # JWT 验证中间件
-│   │   ├── admin-guard.ts        # 仅允许 role=admin
-│   │   ├── rate-limit.ts         # 限流
-│   │   └── cors.ts
+│   │   ├── auth.ts               # JWT 验证中间件 + adminGuard / superAdminGuard
+│   │   ├── rate-limit.ts         # 限流（loginLimiter / generateLimiter / resetPasswordLimiter）
+│   │   ├── cors.ts               # CORS 配置
+│   │   └── error-handler.ts      # Global Error Handler [Phase 3]
 │   ├── workflow/                 # Workflow 引擎（后端执行 7 节点 Pipeline）
 │   │   ├── index.ts              # Workflow 入口
 │   │   └── nodes/
@@ -88,8 +94,11 @@ ContentFlow Lite
 │   │       ├── prompt-repo.ts
 │   │       ├── generation-repo.ts
 │   │       └── user-repo.ts
-│   ├── admin/
-│   │   └── index.ts              # AdminJS 配置（仅 admin 可访问）
+│   ├── utils/
+│   │   ├── logger.ts             # Winston 封装（createLogger）
+│   │   ├── validate.ts           # 输入校验（validateRegisterInput 等）
+│   │   ├── response.ts           # 统一响应信封（success / created / fail）
+│   │   └── route-helpers.ts      # 路由公共工具（parsePagination / wrapPagination）
 │   └── config.ts                 # 配置加载（.env + config.json 合并）
 │
 ├── .env                          # 环境变量（DB 连接 / JWT Secret）
@@ -108,7 +117,7 @@ CREATE TABLE users (
   username      VARCHAR(100)  NOT NULL UNIQUE COMMENT '用户名',
   email         VARCHAR(200)  NOT NULL UNIQUE COMMENT '邮箱',
   password_hash VARCHAR(255)  NOT NULL COMMENT 'bcrypt 哈希',
-  role          ENUM('admin','user') NOT NULL DEFAULT 'user' COMMENT '角色权限',
+  role          ENUM('super_admin','admin','user') NOT NULL DEFAULT 'user' COMMENT '角色权限（super_admin 唯一，admin 管理员，user 普通用户）',
   created_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) COMMENT='用户表';
@@ -333,19 +342,14 @@ const admin = new AdminJS({
     ├─ 校验 username/email 唯一性
     ├─ bcryptjs 哈希密码
     ├─ 创建用户（默认 role=user）
-    └─ 返回 JWT token pair
+    └─ 返回 accessToken
 
 登录
   POST /api/auth/login
     ├─ 查用户（username 或 email）
     ├─ bcryptjs 验证密码
-    ├─ 生成 access token (15min) + refresh token (7d)
-    └─ 返回 token pair
-
-刷新
-  POST /api/auth/refresh
-    ├─ 验证 refresh token
-    └─ 返回新的 access token
+    ├─ 生成 access token (24h)
+    └─ 返回 accessToken
 
 密码重置
   POST /api/auth/reset-password
@@ -364,7 +368,7 @@ const admin = new AdminJS({
 - 验证失败 → HTTP 401 `{ error: { code: "UNAUTHORIZED" } }`
 - 验证成功 → 将 `{ userId, username, role }` 挂到 `req.user`
 - 前端 Store 在每次请求时自动带 `Authorization: Bearer <token>`
-- access token 和 refresh token 存于 localStorage，通过 CSP 头防御 XSS
+- access token 存于 localStorage，通过 CSP 头防御 XSS
 
 ### 5.3 前端认证状态
 
@@ -373,7 +377,6 @@ const admin = new AdminJS({
 interface AuthState {
   user: { id: string; username: string; role: string } | null;
   accessToken: string | null;
-  refreshToken: string | null;
   isAuthenticated: boolean;
 }
 
@@ -399,7 +402,7 @@ router.beforeEach((to, from, next) => {
 | CORS | 仅允许前端域名 | `cors({ origin: frontendUrl })` |
 | 登录爆破 | Rate Limit | `express-rate-limit` 登录路由 5 次/分钟/IP |
 | AI 生成滥用 | Rate Limit | `express-rate-limit` `/api/generate` 10 次/分钟/用户 |
-| Token 泄露 | 短 access token (15min) + refresh 轮换 + localStorage + CSP 防御 XSS | JWT `expiresIn: '15m'` + Helmet CSP `script-src 'self'` |
+| Token 泄露 | access token (24h) + localStorage + CSP 防御 XSS | JWT `expiresIn: '24h'` + Helmet CSP `script-src 'self'` |
 | API Key 泄露 | 加密存储 + 前端不回显 + API 不返回实际值 | AES-256-GCM 加密 + isSet 布尔响应 |
 | 请求体过大 | 限制大小 | `express.json({ limit: '10mb' })` |
 | 安全头 | `helmet()` | Express 中间件 |
@@ -432,7 +435,6 @@ DB_USER=          # 用户名
 DB_PASSWORD=      # 密码
 DB_DATABASE=      # 数据库名
 JWT_SECRET=         # JWT 签名密钥（生产环境必须换强随机值）
-JWT_REFRESH_SECRET= # Refresh Token 签名密钥
 REDIS_URL=          # Redis 连接（可选，不配则跳过 Redis）
 ENCRYPTION_KEY=     # AES-256 加密密钥（64 位 hex 字符串，生产环境必须换）
 ADMIN_EMAIL=        # AdminJS 管理后台登录邮箱
@@ -608,8 +610,6 @@ app.use(admin.options.rootPath, adminRouter);
 # 认证
 POST   /api/auth/register        # 注册
 POST   /api/auth/login           # 登录
-POST   /api/auth/refresh         # 刷新 token
-POST   /api/auth/reset-password  # 密码重置（admin 或邮箱验证）
 GET    /api/auth/me              # 获取当前用户
 
 # 内容（需认证）
@@ -662,7 +662,19 @@ repository 不得包含业务逻辑。
 
 **不允许在业务代码中直接调用原生 API 或第三方 SDK。** 必须封装一层适配器。
 
-典型场景：
+#### Node.js 原生 API 封装
+
+| 原生 API | 封装模块 | 强制程度 |
+|---------|---------|---------|
+| `console.log/error/warn` | `server/utils/logger.ts`（createLogger） | 🔴 绝对禁止裸调 |
+| `process.env` | `server/config.ts`（config 对象） | 🔴 绝对禁止裸调 |
+| `mysql2` | `server/db/client.ts` + repositories | 🔴 绝对禁止裸调 |
+| `crypto` | `server/utils/crypto.ts`（AES-256-GCM） | 🔴 绝对禁止裸调 |
+| `fs` / `fs/promises` | 需要时封装为 `file-utils.ts` | 🟡 超过一处使用必须封装 |
+| `path` | 需要时封装为 `path-utils.ts` | 🟡 超过一处使用必须封装 |
+| `child_process` | 禁止在业务代码中使用 | 🔴 如有需求走封装 |
+
+#### 第三方 SDK 封装
 
 | ❌ 禁止 | ✅ 正确 |
 |---|---|
@@ -671,24 +683,25 @@ repository 不得包含业务逻辑。
 | routes 中 `import Redis from 'ioredis'` 直接读写 | 通过 `db/api-key-store.ts` 封装 |
 | 任意位置直接 `console.log()` | 通过 Logger 模块输出 |
 
-原因：
-- 第三方库升级/替换时，只改封装层，不影响业务代码
-- 统一错误处理（如 OpenAI 错误 → 转为 WorkflowError）
-- 集中管理配置（baseURL、timeout、retry）
+**原因**：第三方库升级/替换只改封装层；统一错误处理；集中管理配置。
+**命名**：封装层放在 `server/utils/` 或 `server/db/`，对外暴露语义化函数签名，隐藏底层实现。
 
-封装层命名约定：`server/utils/` 或 `server/db/` 下的模块，对外暴露语义化函数签名，隐藏底层实现。
+### 9.3 错误处理（统一响应信封）
 
-### 9.3 错误处理
+所有 API 响应使用统一信封格式，由 `server/utils/response.ts` 的 `success()` / `created()` / `fail()` 工厂函数产出：
 
 ```ts
-interface APIError {
-  error: {
-    code: string;    // 与前端 WorkflowError.code 对齐
-    message: string;
-    detail?: unknown;
-  };
-}
+// 成功
+{ code: 200, data: <具体数据>, message: "<中文描述>" }
+// 创建成功
+{ code: 201, data: <创建的资源>, message: "创建成功" }
+
+// 错误
+{ code: "<ERROR_CODE>", message: "<中文描述>", error?: { data: [{ field, message }] } }
 ```
+
+> `error.data` 仅在 `INPUT_ERROR` 时存在，列出每个字段的校验错误。
+> 完整规范见 `docs/SPEC.md` §统一响应格式 和 `docs/API_SPEC.md` §通用响应规范。
 
 | HTTP 状态码 | 场景 |
 |---|---|
@@ -716,11 +729,11 @@ HttpRepository → Express API → 数据库
 
 | 文件 | 职责 |
 |---|---|
-| `src/stores/auth.ts` | 认证状态（登录/注册/Token 刷新/路由守卫） |
+| `src/stores/auth.ts` | 认证状态（登录/注册/登出/路由守卫） |
 | `src/pages/SettingsPage.vue` | 设置页（DB 配置 / API Key / 表状态） |
 | `src/pages/LoginPage.vue` | 登录注册页 |
 | `src/repositories/http-repository.ts` | `HttpRepository<T>` 实现 |
-| `src/utils/api-client.ts` | fetch 封装（自动附加 Authorization 头，401 时尝试刷新 Token） |
+| `src/utils/api-client.ts` | fetch 封装（自动附加 Authorization 头，401 时跳转登录页） |
 
 ### 10.3 离线降级
 
@@ -774,3 +787,4 @@ export function createRepository<T extends { id: string }>(collectionName: strin
 | 2026-07-03 | 不做国际化 | 中文 UI |
 | 2026-07-03 | 不做离线模式 | 数据库不可用 → 错误页，不做 localStorage 离线缓存 |
 | 2026-07-03 | CSP 策略 | Helmet `script-src 'self'; object-src 'none'; base-uri 'self'`，防御 XSS |
+| 2026-07-04 | 认证简化为单 Token | 双 Token 适合长会话/高安全场景，ContentFlow Lite 是单次会话型应用，不需要 refresh。accessToken 改为 24h 有效期，去掉 /api/auth/refresh 端点和 refreshToken |

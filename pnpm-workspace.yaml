@@ -1,0 +1,14 @@
+packages:
+  - 'client'
+  - 'server'
+  - 'shared'
+
+onlyBuiltDependencies:
+  - '@google/genai'
+  - esbuild
+  - protobufjs
+
+allowBuilds:
+  '@google/genai': true
+  esbuild: true
+  protobufjs: true

@@ -5,6 +5,9 @@ alwaysApply: true
 
 # Coding Rules
 
+> 版本：2026-07-05 · 对标 `docs/SPEC.md`
+
+
 ## 一、核心目标
 
 本规范用于统一 ContentFlow Lite 的代码风格与工程实现方式。
@@ -337,3 +340,80 @@ Coding Rules 的核心目标是：
 > 保证所有代码围绕 Workflow + DTO + Prompt 三大核心稳定运行
 
 任何违反该规则的代码，都视为架构违规代码，必须重构。
+
+---
+
+## 十九、原生 API 封装规范（强制）
+
+浏览器和 Node.js 原生 API 只要超过一处使用，必须封装为统一模块。禁止在业务代码中散落裸调。
+
+### 原则
+
+> 原生 API 不可裸调。一处封装，全局复用。
+
+### 前端：浏览器 API 封装
+
+| 原生 API | 封装模块 | 说明 |
+|---------|---------|------|
+| `fetch()` | `client/src/utils/api-client.ts` | 请求/响应拦截、Authorization 头、401 处理 |
+| `localStorage` / `sessionStorage` | `client/src/utils/storage.ts` | 序列化/反序列化、Key 命名空间、过期策略 |
+| `console.log/error/warn` | 前端 Logger 模块（loglevel） | ERROR 级别自动上报后端 |
+| `setTimeout` / `setInterval` | 需要时封装为 `timer.ts` | 统一清理、避免内存泄漏 |
+| `addEventListener` | 需要时封装为 `dom-events.ts` | 自动 cleanup、防止重复绑定 |
+
+### 后端：Node.js API 封装
+
+| 原生 API | 封装模块 | 说明 |
+|---------|---------|------|
+| `console.log/error` | `server/utils/logger.ts`（createLogger） | 5 级日志 + DB Transport |
+| `process.env` | `server/config.ts`（config 对象） | 双层合并（.env + config.json），类型安全 |
+| `mysql2` | `server/db/client.ts`（连接池）+ repositories | 统一连接管理，禁止业务代码裸调 SQL |
+| `crypto` | `server/utils/crypto.ts`（AES-256-GCM） | 加密/解密统一入口 |
+| `fs` / `fs/promises` | 需要时封装为 `file-utils.ts` | 路径安全校验、错误统一处理 |
+| `path` | 需要时封装为 `path-utils.ts` | 项目根目录解析、路径规范化 |
+
+### 强制规则
+
+1. **超过一处使用的原生 API 必须先封装再使用**
+2. **已有封装模块的，禁止在任何业务代码中直接调用原生 API**
+3. **引入新的第三方库前，先在对应的封装模块中完成适配**
+4. **封装模块未就绪时，禁止在业务代码中直接使用该库**
+5. **封装模块必须提供类型定义，不允许 `any`**
+
+### 禁止示例
+
+```ts
+// ❌ 前端：裸调 fetch
+const res = await fetch('/api/generate', { body: JSON.stringify(data) })
+
+// ❌ 前端：裸调 localStorage
+localStorage.setItem('token', token)
+
+// ❌ 后端：裸读 process.env
+const port = process.env.PORT || 3001
+
+// ❌ 后端：裸调 console
+console.log('server started')
+
+// ❌ 后端：裸调 mysql2
+const conn = await mysql.createConnection({ host, user, password })
+```
+
+### 正确示例
+
+```ts
+// ✅ 前端：通过 api-client
+const res = await apiClient.post('/api/generate', data)
+
+// ✅ 前端：通过 storage 模块
+storage.set('token', token)
+
+// ✅ 后端：通过 config 对象
+const port = config.port
+
+// ✅ 后端：通过 Logger
+log.info('server started', { port })
+
+// ✅ 后端：通过 Repository
+const user = await userRepo.getById(id)
+```

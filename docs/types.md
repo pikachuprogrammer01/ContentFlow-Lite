@@ -3,6 +3,38 @@
 本文件定义 ContentFlow Lite 中所有跨模块共享的核心 TypeScript 类型。
 CLAUDE.md 在数据结构类任务中引用本文件。
 
+> 实际源码位于 `shared/src/types/`，按模块拆分为：
+> `auth.ts` / `common.ts` / `content.ts` / `prompt.ts` / `provider.ts` / `workflow.ts`，由 `index.ts` barrel 重导出。
+
+
+## 零、统一响应类型（`shared/src/types/common.ts`）
+
+API 信封格式的类型定义，由 `server/utils/response.ts` 工厂函数产出：
+
+```ts
+/** 字段级校验错误 */
+interface FieldError {
+  field: string;
+  message: string;
+}
+
+/** 成功响应 */
+interface SuccessBody<T = unknown> {
+  code: number;       // HTTP 状态码
+  data: T;            // 业务数据
+  message: string;    // 中文描述
+}
+
+/** 错误响应 */
+interface FailBody {
+  code: string;              // 错误码（INPUT_ERROR / UNAUTHORIZED / FORBIDDEN / NOT_FOUND / CONFLICT / UNKNOWN_ERROR …）
+  message: string;           // 中文描述
+  error?: { data: FieldError[] };  // 参数校验错误（仅 INPUT_ERROR）
+}
+```
+
+响应规范详见 `docs/SPEC.md` §统一响应格式 和 `docs/API_SPEC.md` §通用响应规范。
+
 ---
 
 ## 一、FinalPrompt（Prompt 最终产物）

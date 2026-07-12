@@ -5,6 +5,9 @@ alwaysApply: true
 
 # Project Rules
 
+> 版本：2026-07-05 · 对标 `docs/SPEC.md`
+
+
 ## 一、核心原则
 
 MVP 优先；保持模块边界清晰；新增能力先更新 PRD/SPEC。
@@ -36,13 +39,13 @@ AI 模型决策受 `.rules/provider.mdc` 约束，这里列出简洁摘要：
 |---|---|
 | API 框架 | Express |
 | 数据库 | MySQL 兼容数据库（本地 MySQL / TiDB / MariaDB 等） |
-| 驱动 | mysql2 + TypeORM |
+| 驱动 | mysql2 [Phase 2] → TypeORM [Phase 3] |
 | 数据库管理 | AdminJS |
 | 认证 | JWT + bcryptjs |
 | 缓存 | Redis（可选，API Key 热缓存） |
 
 - 八张核心表：`users` / `contents` / `prompt_templates` / `prompt_versions` / `generation_records` / `user_settings` / `publish_records` / `app_logs`
-- 无离线模式。前端通过 `HttpRepository` 走后端 API，数据库不可用时 App 不可用。
+- 无离线模式。前端通过 `api-client.ts`（axios 封装）走后端 API，数据库不可用时 App 不可用。
 
 ---
 

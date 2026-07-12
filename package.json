@@ -2,27 +2,15 @@
   "name": "contentflow-lite",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc -b && vite build",
-    "preview": "vite preview",
+    "dev": "pnpm --filter contentflow-lite-client dev",
+    "build": "pnpm --filter contentflow-lite-client build",
+    "preview": "pnpm --filter contentflow-lite-client preview",
+    "server:dev": "pnpm --filter contentflow-lite-server dev",
+    "server:build": "pnpm --filter contentflow-lite-server build",
     "phase:check": "bash scripts/phase-gate.sh check",
     "phase:advance": "bash scripts/phase-gate.sh advance",
     "phase:status": "bash scripts/phase-gate.sh status",
     "postinstall": "bash -c '[ -d .git ] && ln -sf ../../scripts/pre-commit-hook.sh .git/hooks/pre-commit 2>/dev/null; ln -sf ../../scripts/pre-push-hook.sh .git/hooks/pre-push 2>/dev/null || true'"
-  },
-  "dependencies": {
-    "pinia": "^3.0.4",
-    "vue": "^3.5.39",
-    "vue-router": "^4.6.4"
-  },
-  "devDependencies": {
-    "@types/node": "^24.13.2",
-    "@vitejs/plugin-vue": "^6.0.7",
-    "@vue/tsconfig": "^0.9.1",
-    "typescript": "~6.0.2",
-    "vite": "^8.1.1",
-    "vue-tsc": "^3.3.5"
   }
 }

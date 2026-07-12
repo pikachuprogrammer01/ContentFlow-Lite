@@ -5,6 +5,9 @@ alwaysApply: true
 
 # UI Rules
 
+> 版本：2026-07-05 · 对标 `docs/SPEC.md`
+
+
 ## 零、组件库选型
 
 | 决策 | 内容 |
@@ -321,7 +324,21 @@ UI 层禁止：
 
 ---
 
-## 十八、总结
+## 十八、浏览器 API 封装
+
+前端浏览器 API 封装规范详见 **`.rules/coding.mdc` §十九（原生 API 封装规范）**。
+
+前端已封装模块：
+| 原生 API | 封装模块 | 核心能力 |
+|---------|---------|---------|
+| `fetch()` | `utils/api-client.ts`（axios） | 统一 baseURL、Authorization 自动注入、401 拦截、错误格式化 |
+| `localStorage` | `utils/storage.ts` | JSON 序列化/反序列化、Key 命名空间隔离 |
+
+UI 层禁止裸调上述 API，必须通过封装模块。
+
+---
+
+## 十九、总结
 
 UI 层的核心原则：
 
