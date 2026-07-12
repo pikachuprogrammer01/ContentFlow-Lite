@@ -18,13 +18,13 @@
 // 用法：tsx server/scripts/verify-user-permission-override.ts
 
 import { AppDataSource } from '../db/client.js';
-import { Role, UserRole, Permission, UserPermission } from '../entities';
-import { grantUserPermission, getEffectivePermissions, ForbiddenError } from '../services/permission-service';
+import { Role, UserRole, Permission, UserPermission } from '../entities/index.js';
+import { grantUserPermission, getEffectivePermissions, ForbiddenError } from '../services/permission-service.js';
 
 async function getUserIdsByRole(roleCode: string): Promise<string[]> {
-  const role = await AppDataSource.manager.findOneBy(Role, { code: roleCode });
+  const role: Role | null = await AppDataSource.manager.findOneBy(Role, { code: roleCode });
   if (!role) return [];
-  const rows = await AppDataSource.manager.find(UserRole, { where: { roleId: role.id } });
+  const rows: UserRole[] = await AppDataSource.manager.find(UserRole, { where: { roleId: role.id } });
   return rows.map((r) => r.userId);
 }
 
@@ -83,7 +83,7 @@ async function main() {
     }
 
     // ── C：分发自己拥有的权限 → 应成功，且立即反映在 target 的 effective permissions ──
-    const permUserList = await AppDataSource.manager.findOneBy(Permission, { code: 'user:list' });
+    const permUserList: Permission | null = await AppDataSource.manager.findOneBy(Permission, { code: 'user:list' });
     if (!permUserList) {
       console.error('❌ 权限码 user:list 不存在，请先执行 seed-permissions.ts');
       ok = false;
@@ -105,7 +105,7 @@ async function main() {
     }
 
     // ── D1：DENY 不要求 actor 自己拥有该权限（与 GRANT 的校验不对称）──
-    const permBatchDelete = await AppDataSource.manager.findOneBy(Permission, { code: 'content:batchDelete' });
+    const permBatchDelete: Permission | null = await AppDataSource.manager.findOneBy(Permission, { code: 'content:batchDelete' });
     if (!permBatchDelete) {
       console.error('❌ 权限码 content:batchDelete 不存在，请先执行 seed-permissions.ts');
       ok = false;
@@ -121,7 +121,7 @@ async function main() {
     }
 
     // ── D2：DENY 能真正移除一条来自角色的权限 ──
-    const permContentList = await AppDataSource.manager.findOneBy(Permission, { code: 'content:list' });
+    const permContentList: Permission | null = await AppDataSource.manager.findOneBy(Permission, { code: 'content:list' });
     let admin1ForNudge = admin1; // 供测试 E 复用
     if (!permContentList) {
       console.error('❌ 权限码 content:list 不存在，请先执行 seed-permissions.ts');
@@ -150,7 +150,7 @@ async function main() {
     }
 
     // ── E：过期的 GRANT 不应生效（直接插库构造，原因见文件头部说明）──
-    const permSystemLog = await AppDataSource.manager.findOneBy(Permission, { code: 'system:log:list' });
+    const permSystemLog: Permission | null = await AppDataSource.manager.findOneBy(Permission, { code: 'system:log:list' });
     if (!permSystemLog) {
       console.error('❌ 权限码 system:log:list 不存在，请先执行 seed-permissions.ts');
       ok = false;

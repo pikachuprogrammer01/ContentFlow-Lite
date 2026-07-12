@@ -16,7 +16,7 @@ import type { DataTableColumn, DataTableRowKey } from 'naive-ui';
 import { api } from '@/utils/api-client';
 import { platformLabel } from '@/utils/platform';
 import { useAuthStore } from '@/stores/auth';
-import type { Content } from '@contentflow/shared/types/content';
+import type { Content, Title, Page } from '@contentflow/shared/types/content';
 
 const message = useMessage();
 const auth = useAuthStore();
@@ -78,10 +78,10 @@ function buildTxt(d: ContentDetail): string {
   }
   if (d.titles.length > 0) {
     lines.push('── 标题候选 ──');
-    d.titles.forEach((t, i) => lines.push(`  ${i + 1}. ${t.text}  [${t.type}]`));
+    d.titles.forEach((t: Title, i: number) => lines.push(`  ${i + 1}. ${t.text}  [${t.type}]`));
     lines.push('');
   }
-  d.pages.forEach((p, i) => {
+  d.pages.forEach((p: Page, i: number) => {
     lines.push(`── 第 ${i + 1} 页 ──`);
     lines.push(p.text);
     lines.push('');
@@ -101,15 +101,15 @@ function buildMd(d: ContentDetail): string {
   }
   if (d.titles.length > 0) {
     lines.push('## 标题候选\n');
-    d.titles.forEach((t, i) => lines.push(`${i + 1}. **${t.text}**（${t.type}）`));
+    d.titles.forEach((t: Title, i: number) => lines.push(`${i + 1}. **${t.text}**（${t.type}）`));
     lines.push('');
   }
-  d.pages.forEach((p, i) => {
+  d.pages.forEach((p: Page, i: number) => {
     lines.push(`## 第 ${i + 1} 页\n`);
     lines.push(p.text);
     lines.push('');
   });
-  if (d.tags.length > 0) lines.push(`标签：${d.tags.map((t) => `\`${t}\``).join(' ')}`);
+  if (d.tags.length > 0) lines.push(`标签：${d.tags.map((t: string) => `\`${t}\``).join(' ')}`);
   return lines.join('\n');
 }
 
@@ -317,7 +317,7 @@ onMounted(load);
       </div>
 
       <!-- ▼ 内容（数据已加载） -->
-      <div v-else style="max-height: 65vh; overflow-y: auto">
+      <div v-else-if="detail" style="max-height: 65vh; overflow-y: auto">
         <!-- 标签行 -->
         <div style="display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap">
           <NTag type="info" size="small">{{ platformLabel(detail.platform) }}</NTag>

@@ -23,14 +23,14 @@
 
 import { randomUUID } from 'node:crypto';
 import { AppDataSource } from '../db/client.js';
-import { Role, UserRole, Permission, RolePermission } from '../entities';
-import { getEffectivePermissions, removeUserRole } from '../services/permission-service';
+import { Role, UserRole, Permission, RolePermission } from '../entities/index.js';
+import { getEffectivePermissions, removeUserRole } from '../services/permission-service.js';
 
 const PROBE_CODE = '__phase3_cache_probe__';
 
 async function getRoleAndUserIds(roleCode: string): Promise<{ roleId: string; userIds: string[] }> {
-  const role = await AppDataSource.manager.findOneByOrFail(Role, { code: roleCode });
-  const rows = await AppDataSource.manager.find(UserRole, { where: { roleId: role.id } });
+  const role: Role = await AppDataSource.manager.findOneByOrFail(Role, { code: roleCode });
+  const rows: UserRole[] = await AppDataSource.manager.find(UserRole, { where: { roleId: role.id } });
   return { roleId: role.id, userIds: rows.map((r) => r.userId) };
 }
 
@@ -100,7 +100,7 @@ async function main() {
       ok = false;
     } else {
       probeRoleId = roleId;
-      let probePerm = await AppDataSource.manager.findOneBy(Permission, { code: PROBE_CODE });
+      let probePerm: Permission | null = await AppDataSource.manager.findOneBy(Permission, { code: PROBE_CODE });
       if (!probePerm) {
         probePerm = await AppDataSource.manager.save(Permission, {
           id: randomUUID(),
@@ -130,12 +130,17 @@ async function main() {
       }
 
       // 独立于缓存，直接查库确认这条写入本身是真实的，排除"旧值是因为写入失败"的可能
-      const rowInDb = await AppDataSource.manager.findOneBy(RolePermission, { roleId, permissionId: probePermId });
-      if (rowInDb) {
-        console.log('✅ role_permissions 写入本身确认成功');
-      } else {
-        console.error('❌ role_permissions 写入未生效，上面"仍是旧值"可能只是写入失败导致的假阳性');
+      if (!probePermId) {
+        console.error('❌ probePermId 为 null，无法验证写入');
         ok = false;
+      } else {
+        const rowInDb = await AppDataSource.manager.findOneBy(RolePermission, { roleId, permissionId: probePermId });
+        if (rowInDb) {
+          console.log('✅ role_permissions 写入本身确认成功');
+        } else {
+          console.error('❌ role_permissions 写入未生效，上面"仍是旧值"可能只是写入失败导致的假阳性');
+          ok = false;
+        }
       }
     }
   } catch (err) {

@@ -48,10 +48,6 @@ function roleColor(role: string): string {
 
 // ── 权限判断 ──────────────────────────────────────────
 
-function isSelf(row: AdminUser): boolean {
-  return row.id === currentUserId.value;
-}
-
 function canEdit(row: AdminUser): boolean {
   if (isSuperAdmin.value) return true;
   return row.role === 'user';

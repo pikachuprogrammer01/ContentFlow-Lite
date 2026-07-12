@@ -13,14 +13,14 @@
 // 用法：tsx server/scripts/verify-level-hierarchy-guard.ts
 
 import { AppDataSource } from '../db/client.js';
-import { Role, UserRole } from '../entities';
-import { assertCanManageUser, ForbiddenError } from '../services/permission-service';
+import { Role, UserRole } from '../entities/index.js';
+import { assertCanManageUser, ForbiddenError } from '../services/permission-service.js';
 
 async function main() {
   await AppDataSource.initialize();
 
-  const adminRole = await AppDataSource.manager.findOneBy(Role, { code: 'admin' });
-  const superAdminRole = await AppDataSource.manager.findOneBy(Role, { code: 'super_admin' });
+  const adminRole: Role | null = await AppDataSource.manager.findOneBy(Role, { code: 'admin' });
+  const superAdminRole: Role | null = await AppDataSource.manager.findOneBy(Role, { code: 'super_admin' });
 
   if (!adminRole || !superAdminRole) {
     console.error('❌ 找不到 admin 或 super_admin 系统角色，请先执行 seed-permissions');
@@ -28,8 +28,8 @@ async function main() {
     process.exit(1);
   }
 
-  const admins = await AppDataSource.manager.find(UserRole, { where: { roleId: adminRole.id } });
-  const superAdmins = await AppDataSource.manager.find(UserRole, { where: { roleId: superAdminRole.id } });
+  const admins: UserRole[] = await AppDataSource.manager.find(UserRole, { where: { roleId: adminRole.id } });
+  const superAdmins: UserRole[] = await AppDataSource.manager.find(UserRole, { where: { roleId: superAdminRole.id } });
 
   let ok = true;
 

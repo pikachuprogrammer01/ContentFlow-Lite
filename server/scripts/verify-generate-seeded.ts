@@ -7,19 +7,19 @@
 // 用法：tsx server/scripts/verify-generate-seeded.ts
 
 import { AppDataSource } from '../db/client.js';
-import { Role, Permission, RolePermission } from '../entities';
+import { Role, Permission, RolePermission } from '../entities/index.js';
 
 async function main() {
   await AppDataSource.initialize();
 
-  const perm = await AppDataSource.manager.findOneBy(Permission, { code: 'content:generate' });
+  const perm: Permission | null = await AppDataSource.manager.findOneBy(Permission, { code: 'content:generate' });
   if (!perm) {
     console.error('❌ 权限码 content:generate 不存在，请先执行 seed-permissions.ts');
     await AppDataSource.destroy();
     process.exit(1);
   }
 
-  const roles = await AppDataSource.manager.find(Role, { where: { isSystem: true } });
+  const roles: Role[] = await AppDataSource.manager.find(Role, { where: { isSystem: true } });
   const missing: string[] = [];
 
   for (const role of roles) {
